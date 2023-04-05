@@ -41,25 +41,28 @@ class ClassEmbedder(nn.Module):
 
 class FrozenT5Embedder(AbstractEncoder):
     """Uses the T5 transformer encoder for text"""
-    def __init__(self, version="google/t5-v1_1-large", device="cuda", max_length=77, freeze=True):  # others are google/t5-v1_1-xl and google/t5-v1_1-xxl
+
+    def __init__(self, version="google/t5-v1_1-large", device="cuda", max_length=77,
+                 freeze=True):  # others are google/t5-v1_1-xl and google/t5-v1_1-xxl
         super().__init__()
         self.tokenizer = T5Tokenizer.from_pretrained(version)
         self.transformer = T5EncoderModel.from_pretrained(version)
-        self.device = device
-        self.max_length = max_length   # TODO: typical value?
-        if freeze:
-            self.freeze()
+        # self.device = device
+        self.max_length = max_length  # TODO: typical value?
+        # if freeze:
+        #     self.freeze()
 
     def freeze(self):
         self.transformer = self.transformer.eval()
-        #self.train = disabled_train
+        # self.train = disabled_train
         for param in self.parameters():
             param.requires_grad = False
 
     def forward(self, text):
         batch_encoding = self.tokenizer(text, truncation=True, max_length=self.max_length, return_length=True,
                                         return_overflowing_tokens=False, padding="max_length", return_tensors="pt")
-        tokens = batch_encoding["input_ids"].to(self.device)
+        # tokens = batch_encoding["input_ids"].to(self.device)
+        tokens = batch_encoding["input_ids"]
         outputs = self.transformer(input_ids=tokens)
 
         z = outputs.last_hidden_state
@@ -71,15 +74,19 @@ class FrozenT5Embedder(AbstractEncoder):
 
 class FrozenCLIPEmbedder(AbstractEncoder):
     """Uses the CLIP transformer encoder for text (from huggingface)"""
-    def __init__(self, version="openai/clip-vit-large-patch14", device="cuda", max_length=77,
+
+    def __init__(self, version="openai/clip-vit-large-patch14", pretrained_model_name_or_path=None, device="cuda",
+                 max_length=77,
                  freeze=True, layer="last"):  # clip-vit-base-patch32
         super().__init__()
-        self.tokenizer = CLIPTokenizer.from_pretrained(version)
-        self.transformer = CLIPModel.from_pretrained(version).text_model
+        self.tokenizer = CLIPTokenizer.from_pretrained(pretrained_model_name_or_path=pretrained_model_name_or_path)
+        self.transformer = CLIPModel.from_pretrained(
+            pretrained_model_name_or_path=pretrained_model_name_or_path).text_model
+        self.transformer.train()
         self.device = device
         self.max_length = max_length
-        if freeze:
-            self.freeze()
+        # if freeze:
+        #     self.freeze()
         self.layer = layer
 
     def freeze(self):
@@ -109,10 +116,11 @@ class FrozenOpenCLIPEmbedder(AbstractEncoder):
     Uses the OpenCLIP transformer encoder for text
     """
     LAYERS = [
-        #"pooled",
+        # "pooled",
         "last",
         "penultimate"
     ]
+
     def __init__(self, arch="ViT-H-14", version="laion2b_s32b_b79k", device="cuda", max_length=77,
                  freeze=True, layer="last"):
         super().__init__()
@@ -152,7 +160,7 @@ class FrozenOpenCLIPEmbedder(AbstractEncoder):
         x = self.model.ln_final(x)
         return x
 
-    def text_transformer_forward(self, x: torch.Tensor, attn_mask = None):
+    def text_transformer_forward(self, x: torch.Tensor, attn_mask=None):
         for i, r in enumerate(self.model.transformer.resblocks):
             if i == len(self.model.transformer.resblocks) - self.layer_idx:
                 break
@@ -172,8 +180,8 @@ class FrozenCLIPT5Encoder(AbstractEncoder):
         super().__init__()
         self.clip_encoder = FrozenCLIPEmbedder(clip_version, device, max_length=clip_max_length)
         self.t5_encoder = FrozenT5Embedder(t5_version, device, max_length=t5_max_length)
-        print(f"{self.clip_encoder.__class__.__name__} has {count_params(self.clip_encoder)*1.e-6:.2f} M parameters, "
-              f"{self.t5_encoder.__class__.__name__} comes with {count_params(self.t5_encoder)*1.e-6:.2f} M params.")
+        print(f"{self.clip_encoder.__class__.__name__} has {count_params(self.clip_encoder) * 1.e-6:.2f} M parameters, "
+              f"{self.t5_encoder.__class__.__name__} comes with {count_params(self.t5_encoder) * 1.e-6:.2f} M params.")
 
     def encode(self, text):
         return self(text)
@@ -288,6 +296,7 @@ def parse_prompt_attention(text):
 
     return res
 
+
 class WebUIFrozenCLIPEmebedder(AbstractEncoder):
     def __init__(self, version="openai/clip-vit-large-patch14", device="cuda", freeze=True, layer="penultimate"):
         super(WebUIFrozenCLIPEmebedder, self).__init__()
@@ -311,7 +320,7 @@ class WebUIFrozenCLIPEmebedder(AbstractEncoder):
         return tokenized
 
     def encode_with_transformers(self, tokens):
-        outputs = self.transformer(input_ids=tokens, output_hidden_states=self.layer!='last')
+        outputs = self.transformer(input_ids=tokens, output_hidden_states=self.layer != 'last')
 
         if self.layer == 'penultimate':
             z = outputs.hidden_states[-2]
@@ -340,7 +349,7 @@ class WebUIFrozenCLIPEmebedder(AbstractEncoder):
                     last_comma = len(remade_tokens)
                 elif self.comma_padding_backtrack != 0 and max(len(remade_tokens),
                                                                1) % 75 == 0 and last_comma != -1 and len(
-                        remade_tokens) - last_comma <= self.comma_padding_backtrack:
+                    remade_tokens) - last_comma <= self.comma_padding_backtrack:
                     last_comma += 1
                     reloc_tokens = remade_tokens[last_comma:]
                     reloc_mults = multipliers[last_comma:]
@@ -386,7 +395,8 @@ class WebUIFrozenCLIPEmebedder(AbstractEncoder):
         return batch_multipliers, remade_batch_tokens, token_count
 
     def process_tokens(self, remade_batch_tokens, batch_multipliers):
-        remade_batch_tokens = [[self.tokenizer.bos_token_id] + x[:75] + [self.tokenizer.eos_token_id] for x in remade_batch_tokens]
+        remade_batch_tokens = [[self.tokenizer.bos_token_id] + x[:75] + [self.tokenizer.eos_token_id] for x in
+                               remade_batch_tokens]
         batch_multipliers = [[1.0] + x[:75] + [1.0] for x in batch_multipliers]
 
         tokens = torch.asarray(remade_batch_tokens).to(self.device)
@@ -433,7 +443,6 @@ class WebUIFrozenCLIPEmebedder(AbstractEncoder):
 
     def encode(self, text):
         return self(text)
-
 
 
 if __name__ == "__main__":

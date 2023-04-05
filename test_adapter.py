@@ -30,7 +30,7 @@ def main():
     os.makedirs(opt.outdir, exist_ok=True)
     if opt.resize_short_edge is None:
         print(f"you don't specify the resize_shot_edge, so the maximum resolution is set to {opt.max_resolution}")
-    opt.device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+    opt.device = torch.device("cuda") if torch.cuda.is_available() and opt.device == 'GPU' else torch.device("cpu")
 
     # support two test mode: single image test, and batch test (through a txt file)
     if opt.prompt.endswith('.txt'):
@@ -47,7 +47,6 @@ def main():
         image_paths = [opt.cond_path]
         prompts = [opt.prompt]
     print(image_paths)
-
     # prepare models
     sd_model, sampler = get_sd_models(opt)
     adapter = get_adapters(opt, getattr(ExtraCondition, which_cond))

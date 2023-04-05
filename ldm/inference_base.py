@@ -75,6 +75,13 @@ def get_base_argument_parser() -> argparse.ArgumentParser:
     )
 
     parser.add_argument(
+        '--device',
+        type=str,
+        default='GPU',
+        help='GPU or CPU',
+    )
+
+    parser.add_argument(
         '--vae_ckpt',
         type=str,
         default=None,

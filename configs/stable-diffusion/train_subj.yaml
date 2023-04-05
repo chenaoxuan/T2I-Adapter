@@ -1,3 +1,4 @@
+name: train_subj
 model:
   base_learning_rate: 1.0e-04
   target: ldm.models.diffusion.ddpm.LatentDiffusion
@@ -17,10 +18,18 @@ model:
     scale_factor: 0.18215
     use_ema: False
 
+    scheduler_config: # 10000 warmup steps
+      target: ldm.lr_scheduler.LambdaLinearScheduler
+      params:
+        warm_up_steps: [ 10000 ]
+        cycle_lengths: [ 10000000000000 ] # incredibly large number to prevent corner cases
+        f_start: [ 1.e-6 ]
+        f_max: [ 1. ]
+        f_min: [ 1. ]
+
     unet_config:
       target: ldm.modules.diffusionmodules.openaimodel.UNetModel
       params:
-        use_fp16: True
         image_size: 32 # unused
         in_channels: 4
         out_channels: 4
@@ -43,25 +52,39 @@ model:
         ddconfig:
           double_z: true
           z_channels: 4
-          resolution: 512
+          resolution: 256
           in_channels: 3
           out_ch: 3
           ch: 128
           ch_mult:
-          - 1
-          - 2
-          - 4
-          - 4
+            - 1
+            - 2
+            - 4
+            - 4
           num_res_blocks: 2
-          attn_resolutions: []
+          attn_resolutions: [ ]
           dropout: 0.0
         lossconfig:
           target: torch.nn.Identity
 
-    cond_stage_config:
+    cond_stage_config: #__is_unconditional__
       target: ldm.modules.encoders.modules.FrozenCLIPEmbedder
       params:
         version: openai/clip-vit-large-patch14
         pretrained_model_name_or_path: F:\\clip-vit-large-patch14
         layer: last
-        device: cuda
+        device: cpu
+
+logger:
+  print_freq: 100
+  save_checkpoint_freq: !!float 1e4
+  use_tb_logger: true
+  wandb:
+    project: ~
+    resume_id: ~
+dist_params:
+  backend: nccl
+  port: 29500
+training:
+  lr: !!float 1e-5
+  save_freq: 1e4
