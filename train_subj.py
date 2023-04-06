@@ -10,9 +10,6 @@ import cv2
 import torch
 import os
 
-os.environ['RANK'] = '0'
-os.environ['MASTER_ADDR'] = 'localhost'
-os.environ['MASTER_PORT'] = '5678'
 from basicsr.utils import img2tensor, tensor2img, scandir, get_time_str, get_root_logger, get_env_info
 from ldm.data.dataset_subject import dataset_subject
 import argparse
@@ -129,7 +126,7 @@ def get_parse():
     parser.add_argument(
         "--print_fq",
         type=int,
-        default=100,
+        default=5,
         help="path to config which constructs model",
     )
     parser.add_argument(
@@ -307,84 +304,99 @@ if __name__ == '__main__':
     # copy the yml file to the experiment root
     copy_opt_file(opt.config, experiments_root)
 
-    # # training
-    # logger.info(f'Start training from epoch: {start_epoch}, iter: {current_iter}')
-    # for epoch in range(start_epoch, opt.epochs):
-    #     train_dataloader.sampler.set_epoch(epoch)
-    #     # train
-    #     for _, data in enumerate(train_dataloader):
-    #         current_iter += 1
-    #         with torch.no_grad():
-    #             c = model.module.get_learned_conditioning(data['sentence'])
-    #             z = model.module.encode_first_stage((data['im'] * 2 - 1.).cuda(non_blocking=True))
-    #             z = model.module.get_first_stage_encoding(z)
-    #
-    #         mask = data['mask']
-    #         optimizer.zero_grad()
-    #         model.zero_grad()
-    #         features_adapter = model_ad(mask)
-    #         l_pixel, loss_dict = model(z, c=c, features_adapter=features_adapter)
-    #         l_pixel.backward()
-    #         optimizer.step()
-    #
-    #         if (current_iter + 1) % opt.print_fq == 0:
-    #             logger.info(loss_dict)
-    #
-    #         # save checkpoint
-    #         rank, _ = get_dist_info()
-    #         if (rank == 0) and ((current_iter + 1) % config['training']['save_freq'] == 0):
-    #             save_filename = f'model_ad_{current_iter + 1}.pth'
-    #             save_path = os.path.join(experiments_root, 'models', save_filename)
-    #             save_dict = {}
-    #             model_ad_bare = get_bare_model(model_ad)
-    #             state_dict = model_ad_bare.state_dict()
-    #             for key, param in state_dict.items():
-    #                 if key.startswith('module.'):  # remove unnecessary 'module.'
-    #                     key = key[7:]
-    #                 save_dict[key] = param.cpu()
-    #             torch.save(save_dict, save_path)
-    #             # save state
-    #             state = {'epoch': epoch, 'iter': current_iter + 1, 'optimizers': optimizer.state_dict()}
-    #             save_filename = f'{current_iter + 1}.state'
-    #             save_path = os.path.join(experiments_root, 'training_states', save_filename)
-    #             torch.save(state, save_path)
-    #
-    #     # val
-    #     rank, _ = get_dist_info()
-    #     if rank == 0:
-    #         for data in val_dataloader:
-    #             with torch.no_grad():
-    #                 if opt.dpm_solver:
-    #                     sampler = DPMSolverSampler(model.module)
-    #                 elif opt.plms:
-    #                     sampler = PLMSSampler(model.module)
-    #                 else:
-    #                     sampler = DDIMSampler(model.module)
-    #                 c = model.module.get_learned_conditioning(data['sentence'])
-    #                 mask = data['mask']
-    #                 im_mask = tensor2img(mask)
-    #                 cv2.imwrite(os.path.join(experiments_root, 'visualization', 'mask_%04d.png' % epoch), im_mask)
-    #                 features_adapter = model_ad(mask)
-    #                 shape = [opt.C, opt.H // opt.f, opt.W // opt.f]
-    #                 samples_ddim, _ = sampler.sample(S=opt.ddim_steps,
-    #                                                  conditioning=c,
-    #                                                  batch_size=opt.n_samples,
-    #                                                  shape=shape,
-    #                                                  verbose=False,
-    #                                                  unconditional_guidance_scale=opt.scale,
-    #                                                  unconditional_conditioning=model.module.get_learned_conditioning(
-    #                                                      opt.n_samples * [""]),
-    #                                                  eta=opt.ddim_eta,
-    #                                                  x_T=None,
-    #                                                  features_adapter=features_adapter)
-    #                 x_samples_ddim = model.module.decode_first_stage(samples_ddim)
-    #                 x_samples_ddim = torch.clamp((x_samples_ddim + 1.0) / 2.0, min=0.0, max=1.0)
-    #                 x_samples_ddim = x_samples_ddim.cpu().permute(0, 2, 3, 1).numpy()
-    #                 for id_sample, x_sample in enumerate(x_samples_ddim):
-    #                     x_sample = 255. * x_sample
-    #                     img = x_sample.astype(np.uint8)
-    #                     img = cv2.putText(img.copy(), data['sentence'][0], (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
-    #                                       (0, 255, 0), 2)
-    #                     cv2.imwrite(os.path.join(experiments_root, 'visualization',
-    #                                              'sample_e%04d_s%04d.png' % (epoch, id_sample)), img[:, :, ::-1])
-    #                 break
+    # training
+    logger.info(f'Start training from epoch: {start_epoch}, iter: {current_iter}')
+    for epoch in range(start_epoch, opt.epochs):
+        # if opt.distributed:
+        #     train_dataloader.sampler.set_epoch(epoch)
+        # # train
+        # for _, data in enumerate(train_dataloader):
+        #     current_iter += 1
+        #     with torch.no_grad():
+        #         if opt.distributed:
+        #             c = model.module.get_learned_conditioning(data['sentence'])
+        #             z = model.module.encode_first_stage((data['im'] * 2 - 1.).to(device))
+        #             z = model.module.get_first_stage_encoding(z)
+        #         else:
+        #             c = model.get_learned_conditioning(data['sentence'])
+        #             z = model.encode_first_stage((data['im'] * 2 - 1.).to(device))
+        #             z = model.get_first_stage_encoding(z)
+        #
+        #     optimizer.zero_grad()
+        #     model.zero_grad()
+        #     features_adapter = model_ad(data['im'].to(device))
+        #     l_pixel, loss_dict = model(z, c=c, features_adapter=features_adapter)
+        #     l_pixel.backward()
+        #     optimizer.step()
+        #
+        #     if (current_iter + 1) % opt.print_fq == 0:
+        #         logger.info(loss_dict)
+        #
+        #     # save checkpoint
+        #     if opt.distributed:
+        #         rank, _ = get_dist_info()
+        #     else:
+        #         rank = 0
+        #     if (rank == 0) and ((current_iter + 1) % config['training']['save_freq'] == 0):
+        #         save_filename = f'model_ad_{current_iter + 1}.pth'
+        #         save_path = os.path.join(experiments_root, 'models', save_filename)
+        #         save_dict = {}
+        #         model_ad_bare = get_bare_model(model_ad)
+        #         state_dict = model_ad_bare.state_dict()
+        #         for key, param in state_dict.items():
+        #             if key.startswith('module.'):  # remove unnecessary 'module.'
+        #                 key = key[7:]
+        #             save_dict[key] = param.cpu()
+        #         torch.save(save_dict, save_path)
+        #         # save state
+        #         state = {'epoch': epoch, 'iter': current_iter + 1, 'optimizers': optimizer.state_dict()}
+        #         save_filename = f'{current_iter + 1}.state'
+        #         save_path = os.path.join(experiments_root, 'training_states', save_filename)
+        #         torch.save(state, save_path)
+
+        # val
+        if opt.distributed:
+            rank, _ = get_dist_info()
+        else:
+            rank = 0
+        # if rank == 0 and (epoch + 1) % config['training']['val_freq_epoch'] == 0:
+        if rank == 0:
+            with torch.no_grad():
+                if opt.dpm_solver:
+                    sampler = DPMSolverSampler(model)
+                elif opt.plms:
+                    sampler = PLMSSampler(model)
+                else:
+                    sampler = DDIMSampler(model)
+                for d_idx, data in enumerate(val_dataloader):
+                    for v_idx in range(opt.n_samples):
+                        c = model.get_learned_conditioning(data['sentence'])
+                        im_mask = tensor2img(data['im'])
+                        cv2.imwrite(os.path.join(experiments_root, 'visualization', 'subj_%04d_%02d.png' % (epoch, d_idx)),
+                                    im_mask)
+                        features_adapter = model_ad(data['im'].to(device))
+                        shape = [opt.C, opt.H // opt.f, opt.W // opt.f]
+                        samples_ddim, _ = sampler.sample(S=opt.ddim_steps,
+                                                         conditioning=c,
+                                                         batch_size=1,
+                                                         shape=shape,
+                                                         verbose=False,
+                                                         unconditional_guidance_scale=opt.scale,
+                                                         unconditional_conditioning=model.get_learned_conditioning([""]),
+                                                         eta=opt.ddim_eta,
+                                                         x_T=None,
+                                                         features_adapter=features_adapter)
+                        x_samples_ddim = model.decode_first_stage(samples_ddim)
+                        x_samples_ddim = torch.clamp((x_samples_ddim + 1.0) / 2.0, min=0.0, max=1.0)
+                        x_samples_ddim = x_samples_ddim.cpu().permute(0, 2, 3, 1).numpy()
+                        for id_sample, x_sample in enumerate(x_samples_ddim):
+                            x_sample = 255. * x_sample
+                            img = x_sample.astype(np.uint8)
+                            img = cv2.putText(img.copy(), data['sentence'][0], (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
+                                              (0, 255, 0), 2)
+                            cv2.imwrite(os.path.join(experiments_root, 'visualization',
+                                                     'sample_e%04d_d%02d_s%04d.png' % (epoch, d_idx, v_idx)),
+                                        img[:, :, ::-1])
+
+
+#
