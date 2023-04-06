@@ -21,7 +21,7 @@ class dataset_subject(Dataset):
         im = cv2.resize(im, (self.image_size, self.image_size))
         im = img2tensor(im, bgr2rgb=True, float32=True) / 255.
 
-        return {'im': im, 'sentence': self.caption}
+        return {'im': im, 'sentence': self.caption[idx]}
 
     def __len__(self):
         return len(self.files)
