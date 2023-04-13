@@ -23,6 +23,7 @@ class dataset_subject(Dataset):
 
         return {'im': im, 'sentence': self.caption[idx]}
 
+
     def __len__(self):
         return len(self.files)
 

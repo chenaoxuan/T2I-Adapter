@@ -307,60 +307,60 @@ if __name__ == '__main__':
     # training
     logger.info(f'Start training from epoch: {start_epoch}, iter: {current_iter}')
     for epoch in range(start_epoch, opt.epochs):
-        # if opt.distributed:
-        #     train_dataloader.sampler.set_epoch(epoch)
-        # # train
-        # for _, data in enumerate(train_dataloader):
-        #     current_iter += 1
-        #     with torch.no_grad():
-        #         if opt.distributed:
-        #             c = model.module.get_learned_conditioning(data['sentence'])
-        #             z = model.module.encode_first_stage((data['im'] * 2 - 1.).to(device))
-        #             z = model.module.get_first_stage_encoding(z)
-        #         else:
-        #             c = model.get_learned_conditioning(data['sentence'])
-        #             z = model.encode_first_stage((data['im'] * 2 - 1.).to(device))
-        #             z = model.get_first_stage_encoding(z)
-        #
-        #     optimizer.zero_grad()
-        #     model.zero_grad()
-        #     features_adapter = model_ad(data['im'].to(device))
-        #     l_pixel, loss_dict = model(z, c=c, features_adapter=features_adapter)
-        #     l_pixel.backward()
-        #     optimizer.step()
-        #
-        #     if (current_iter + 1) % opt.print_fq == 0:
-        #         logger.info(loss_dict)
-        #
-        #     # save checkpoint
-        #     if opt.distributed:
-        #         rank, _ = get_dist_info()
-        #     else:
-        #         rank = 0
-        #     if (rank == 0) and ((current_iter + 1) % config['training']['save_freq'] == 0):
-        #         save_filename = f'model_ad_{current_iter + 1}.pth'
-        #         save_path = os.path.join(experiments_root, 'models', save_filename)
-        #         save_dict = {}
-        #         model_ad_bare = get_bare_model(model_ad)
-        #         state_dict = model_ad_bare.state_dict()
-        #         for key, param in state_dict.items():
-        #             if key.startswith('module.'):  # remove unnecessary 'module.'
-        #                 key = key[7:]
-        #             save_dict[key] = param.cpu()
-        #         torch.save(save_dict, save_path)
-        #         # save state
-        #         state = {'epoch': epoch, 'iter': current_iter + 1, 'optimizers': optimizer.state_dict()}
-        #         save_filename = f'{current_iter + 1}.state'
-        #         save_path = os.path.join(experiments_root, 'training_states', save_filename)
-        #         torch.save(state, save_path)
+        if opt.distributed:
+            train_dataloader.sampler.set_epoch(epoch)
+        # train
+        for _, data in enumerate(train_dataloader):
+            current_iter += 1
+            with torch.no_grad():
+                if opt.distributed:
+                    c = model.module.get_learned_conditioning(data['sentence'])
+                    z = model.module.encode_first_stage((data['im'] * 2 - 1.).to(device))
+                    z = model.module.get_first_stage_encoding(z)
+                else:
+                    c = model.get_learned_conditioning(data['sentence'])
+                    z = model.encode_first_stage((data['im'] * 2 - 1.).to(device))
+                    z = model.get_first_stage_encoding(z)
+
+            optimizer.zero_grad()
+            model.zero_grad()
+            features_adapter = model_ad(data['im'].to(device))
+            l_pixel, loss_dict = model(z, c=c, features_adapter=features_adapter)
+            l_pixel.backward()
+            optimizer.step()
+
+            if (current_iter + 1) % opt.print_fq == 0:
+                logger.info(loss_dict)
+
+            # save checkpoint
+            if opt.distributed:
+                rank, _ = get_dist_info()
+            else:
+                rank = 0
+            if (rank == 0) and ((current_iter + 1) % config['training']['save_freq'] == 0):
+                save_filename = f'model_ad_{current_iter + 1}.pth'
+                save_path = os.path.join(experiments_root, 'models', save_filename)
+                save_dict = {}
+                model_ad_bare = get_bare_model(model_ad)
+                state_dict = model_ad_bare.state_dict()
+                for key, param in state_dict.items():
+                    if key.startswith('module.'):  # remove unnecessary 'module.'
+                        key = key[7:]
+                    save_dict[key] = param.cpu()
+                torch.save(save_dict, save_path)
+                # save state
+                state = {'epoch': epoch, 'iter': current_iter + 1, 'optimizers': optimizer.state_dict()}
+                save_filename = f'{current_iter + 1}.state'
+                save_path = os.path.join(experiments_root, 'training_states', save_filename)
+                torch.save(state, save_path)
 
         # val
         if opt.distributed:
             rank, _ = get_dist_info()
         else:
             rank = 0
-        # if rank == 0 and (epoch + 1) % config['training']['val_freq_epoch'] == 0:
-        if rank == 0:
+        if rank == 0 and (epoch + 1) % config['training']['val_freq_epoch'] == 0:
+        # if rank == 0:
             with torch.no_grad():
                 if opt.dpm_solver:
                     sampler = DPMSolverSampler(model)
