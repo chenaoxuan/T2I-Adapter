@@ -57,17 +57,22 @@ def load_resume_state(opt):
                 states = [float(v.split('.state')[0]) for v in states]
                 resume_state_path = os.path.join(state_path, f'{max(states):.0f}.state')
                 opt.resume_state_path = resume_state_path
+                resume_ad_path = os.path.join('experiments', opt.name, 'models', f'model_ad_{max(states):.0f}.pth')
+                opt.resume_ad_path = resume_ad_path
+
     # else:
     #     if opt['path'].get('resume_state'):
     #         resume_state_path = opt['path']['resume_state']
 
     if resume_state_path is None:
         resume_state = None
+        resume_ad = None
     else:
         device_id = torch.cuda.current_device()
         resume_state = torch.load(resume_state_path, map_location=lambda storage, loc: storage.cuda(device_id))
+        resume_ad = torch.load(resume_ad_path, map_location=lambda storage, loc: storage.cuda(device_id))
         # check_resume(opt, resume_state['iter'])
-    return resume_state
+    return resume_state, resume_ad
 
 
 def get_parse():
@@ -221,8 +226,8 @@ if __name__ == '__main__':
         torch.cuda.set_device(opt.local_rank)
 
     # dataset
-    path_json_train = 'F:\\dataset\\dreambooth\\dog\\dog_train.json'
-    path_json_val = 'F:\\dataset\\dreambooth\\dog\\dog_val.json'
+    path_json_train = 'F:\\dataset\\dog\\dog_train.json'
+    path_json_val = 'F:\\dataset\\dog\\dog_val.json'
     train_dataset = dataset_subject(
         path_json=path_json_train,
         image_size=512
@@ -277,7 +282,7 @@ if __name__ == '__main__':
     experiments_root = os.path.join('experiments', opt.name)
 
     # resume state
-    resume_state = load_resume_state(opt)
+    resume_state, resume_ad = load_resume_state(opt)
     if resume_state is None:
         mkdir_and_rename(experiments_root)
         start_epoch = 0
@@ -297,6 +302,7 @@ if __name__ == '__main__':
         logger.info(dict2str(config))
         resume_optimizers = resume_state['optimizers']
         optimizer.load_state_dict(resume_optimizers)
+        model_ad.load_state_dict(resume_ad)
         logger.info(f"Resuming training from epoch: {resume_state['epoch']}, " f"iter: {resume_state['iter']}.")
         start_epoch = resume_state['epoch']
         current_iter = resume_state['iter']
@@ -361,7 +367,7 @@ if __name__ == '__main__':
         else:
             rank = 0
         if rank == 0 and (epoch + 1) % config['training']['val_freq_epoch'] == 0:
-        # if rank == 0:
+            # if rank == 0:
             with torch.no_grad():
                 if opt.dpm_solver:
                     sampler = DPMSolverSampler(model)
@@ -373,8 +379,9 @@ if __name__ == '__main__':
                     for v_idx in range(opt.n_samples):
                         c = model.get_learned_conditioning(data['sentence'])
                         im_mask = tensor2img(data['im'])
-                        cv2.imwrite(os.path.join(experiments_root, 'visualization', 'subj_%04d_%02d.png' % (epoch, d_idx)),
-                                    im_mask)
+                        cv2.imwrite(
+                            os.path.join(experiments_root, 'visualization', 'subj_%04d_%02d.png' % (epoch, d_idx)),
+                            im_mask)
                         features_adapter = model_ad(data['im'].to(device))
                         shape = [opt.C, opt.H // opt.f, opt.W // opt.f]
                         samples_ddim, _ = sampler.sample(S=opt.ddim_steps,
@@ -383,7 +390,8 @@ if __name__ == '__main__':
                                                          shape=shape,
                                                          verbose=False,
                                                          unconditional_guidance_scale=opt.scale,
-                                                         unconditional_conditioning=model.get_learned_conditioning([""]),
+                                                         unconditional_conditioning=model.get_learned_conditioning(
+                                                             [""]),
                                                          eta=opt.ddim_eta,
                                                          x_T=None,
                                                          features_adapter=features_adapter)
@@ -398,6 +406,5 @@ if __name__ == '__main__':
                             cv2.imwrite(os.path.join(experiments_root, 'visualization',
                                                      'sample_e%04d_d%02d_s%04d.png' % (epoch, d_idx, v_idx)),
                                         img[:, :, ::-1])
-
 
 #
