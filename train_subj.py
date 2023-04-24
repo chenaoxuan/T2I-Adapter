@@ -336,7 +336,7 @@ if __name__ == '__main__':
             optimizer.step()
 
             if (current_iter + 1) % opt.print_fq == 0:
-                logger.info(current_iter + 1)
+                logger.info(f"Epoch:{epoch}")
                 logger.info(loss_dict)
 
             # save checkpoint
