@@ -24,4 +24,6 @@ oss cp oss://sd-v1-4.zip /hy-tmp
 oss cp oss://all.zip /hy-tmp
 
 unzip -d Clip-Vit-Large-Patch14 Clip-Vit-Large-Patch14.zip
+unzip sd-v1-4.zip
+unzip -d all all.zip
 
