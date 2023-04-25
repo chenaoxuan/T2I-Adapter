@@ -344,8 +344,8 @@ if __name__ == '__main__':
                 rank, _ = get_dist_info()
             else:
                 rank = 0
-            if (rank == 0) and ((current_iter + 1) % config['training']['save_freq'] == 0):
-                save_filename = f'model_ad_{current_iter + 1}.pth'
+            if (rank == 0) and ((epoch + 1) % config['training']['save_freq_epoch'] == 0):
+                save_filename = f'model_ad_{epoch + 1}.pth'
                 save_path = os.path.join(experiments_root, 'models', save_filename)
                 save_dict = {}
                 model_ad_bare = get_bare_model(model_ad)
@@ -357,7 +357,7 @@ if __name__ == '__main__':
                 torch.save(save_dict, save_path)
                 # save state
                 state = {'epoch': epoch, 'iter': current_iter + 1, 'optimizers': optimizer.state_dict()}
-                save_filename = f'{current_iter + 1}.state'
+                save_filename = f'{epoch + 1}.state'
                 save_path = os.path.join(experiments_root, 'training_states', save_filename)
                 torch.save(state, save_path)
 

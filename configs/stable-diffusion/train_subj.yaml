@@ -87,5 +87,5 @@ dist_params:
   port: 29500
 training:
   lr: !!float 1e-5
-  save_freq: 1e3
+  save_freq_epoch: 1e3
   val_freq_epoch: 2
