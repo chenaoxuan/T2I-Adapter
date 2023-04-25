@@ -23,3 +23,5 @@ oss cp oss://Taiyi-CLIP-RoBERTa-102M-ViT-L-Chinese.zip /hy-tmp
 oss cp oss://sd-v1-4.zip /hy-tmp
 oss cp oss://all.zip /hy-tmp
 
+unzip -d Clip-Vit-Large-Patch14 Clip-Vit-Large-Patch14.zip
+
