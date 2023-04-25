@@ -226,8 +226,8 @@ if __name__ == '__main__':
         torch.cuda.set_device(opt.local_rank)
 
     # dataset
-    path_json_train = 'F:\\dataset\\dog\\dog_train.json'
-    path_json_val = 'F:\\dataset\\dog\\dog_val.json'
+    path_json_train = '/hy-tmp/all/dog_train1.json'
+    path_json_val = '/hy-tmp/all/dog_val1.json'
     train_dataset = dataset_subject(
         path_json=path_json_train,
         image_size=512
