@@ -4,16 +4,13 @@ from transformers import CLIPModel, CLIPProcessor
 
 
 class ClipImageFeature(nn.Module):
-    def __init__(self, version="openai/clip-vit-large-patch14", pretrained_model_name_or_path=None, device="cuda",
-                 layer="last"):
+    def __init__(self, version="openai/clip-vit-large-patch14", pretrained_model_name_or_path=None):
         super().__init__()
         self.processor = CLIPProcessor.from_pretrained(
             pretrained_model_name_or_path=pretrained_model_name_or_path
         )
         self.model = CLIPModel.from_pretrained(
             pretrained_model_name_or_path=pretrained_model_name_or_path)
-        self.device = device
-        self.layer = layer
         self.freeze()
 
     def freeze(self):

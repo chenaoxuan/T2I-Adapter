@@ -18,6 +18,9 @@ python train_subj.py --ckpt F:\\sd-v1-4.ckpt --gpu --epochs 500 --print_fq 25
 python train_subj.py --ckpt /hy-tmp/sd-v1-4.ckpt --gpu --epochs 1000 --print_fq 25 --n_samples 2
 
 
+python tmp.py --ckpt F:/Ckpt/sd-v1-4.ckpt --gpu --epochs 10 --print_fq 1 --n_samples 1
+
+
 oss cp oss://Clip-Vit-Large-Patch14.zip /hy-tmp
 oss cp oss://Taiyi-CLIP-RoBERTa-102M-ViT-L-Chinese.zip /hy-tmp
 oss cp oss://sd-v1-4.zip /hy-tmp

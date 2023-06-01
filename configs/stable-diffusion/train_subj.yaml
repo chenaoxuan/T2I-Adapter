@@ -71,9 +71,15 @@ model:
       target: ldm.modules.encoders.modules.FrozenCLIPEmbedder
       params:
         version: openai/clip-vit-large-patch14
-        pretrained_model_name_or_path: /hy-tmp/Clip-Vit-Large-Patch14
+        pretrained_model_name_or_path: F:/Clip-Vit-Large-Patch14
         layer: last
         device: cuda
+
+dataset:
+  train_json_path: F:/dataset/continual_dog/dog_train.json
+  val_json_path: F:/dataset/continual_dog/dog_val.json
+  start_data: 1
+  end_data: 3
 
 logger:
   print_freq: 100
