@@ -71,7 +71,7 @@ model:
       target: ldm.modules.encoders.modules.FrozenCLIPEmbedder
       params:
         version: openai/clip-vit-large-patch14
-        pretrained_model_name_or_path: F:\\clip-vit-large-patch14
+        pretrained_model_name_or_path: /hy-tmp/Clip-Vit-Large-Patch14
         layer: last
         device: cuda
 
@@ -87,5 +87,5 @@ dist_params:
   port: 29500
 training:
   lr: !!float 1e-5
-  save_freq: 1e3
-  val_freq_epoch: 2
+  save_freq_epoch: 5e2
+  val_freq_epoch: 100
