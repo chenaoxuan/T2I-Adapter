@@ -303,7 +303,7 @@ if __name__ == '__main__':
         train_dataloader = torch.utils.data.DataLoader(
             train_dataset,
             batch_size=opt.batch_size,
-            shuffle=(train_sampler is None),
+            shuffle=False,
             num_workers=opt.num_workers,
             pin_memory=True,
             sampler=train_sampler)
