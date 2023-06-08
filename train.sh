@@ -32,3 +32,6 @@ unzip sd-v1-4.zip
 unzip -d all all.zip
 unzip -d continual_dog continual_dog.zip
 
+
+
+zip -r train_subj.zip train_subj/
