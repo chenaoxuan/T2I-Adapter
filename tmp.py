@@ -325,7 +325,7 @@ if __name__ == '__main__':
 
                 optimizer.zero_grad()
                 model.zero_grad()
-                t = torch.randint(0, model.timesteps, (opt.batch_size,), device=model.device).long()
+                t = torch.randint(0, model.num_timesteps, (opt.batch_size,), device=model.device).long()
                 features_adapter = model_ad(data['im'].to(device), timesteps=t)
                 forget_scale_weight = (0.25, 0.25, 0.25, 0.25)
                 l_forget_weight = 0

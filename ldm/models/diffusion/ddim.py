@@ -182,7 +182,7 @@ class DDIMSampler(object):
                       unconditional_guidance_scale=1., unconditional_conditioning=None, adapter_input=None,
                       append_to_context=None):
         b, *_, device = *x.shape, x.device
-        features_adapter = self.adapter(adapter_input, timesteps=t)
+        features_adapter = self.adapter(adapter_input, timesteps=t) if adapter_input is not None else None
         if unconditional_conditioning is None or unconditional_guidance_scale == 1.:
             if append_to_context is not None:
                 model_output = self.model.apply_model(x, t, torch.cat([c, append_to_context], dim=1),
