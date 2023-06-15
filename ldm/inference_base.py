@@ -295,7 +295,7 @@ def diffusion_inference(opt, model, sampler, adapter_features, append_to_context
         unconditional_guidance_scale=opt.scale,
         unconditional_conditioning=uc,
         x_T=None,
-        features_adapter=adapter_features,
+        adapter_input=adapter_features,
         append_to_context=append_to_context,
         cond_tau=opt.cond_tau,
         style_cond_tau=opt.style_cond_tau,

@@ -230,7 +230,7 @@ if __name__ == '__main__':
 
     # subject encoder
     model_ad = Adapter(cin=int(3 * 64), channels=[320, 640, 1280, 1280][:4], nums_rb=2, ksize=1, sk=True,
-                       use_conv=False)
+                       use_conv=False, time_embed_dim=320 * 4)
 
     # to gpus
     if opt.distributed:
@@ -325,10 +325,11 @@ if __name__ == '__main__':
 
                 optimizer.zero_grad()
                 model.zero_grad()
-                features_adapter = model_ad(data['im'].to(device))
+                t = torch.randint(0, model.timesteps, (opt.batch_size,), device=model.device).long()
+                features_adapter = model_ad(data['im'].to(device), timesteps=t)
                 forget_scale_weight = (0.25, 0.25, 0.25, 0.25)
                 l_forget_weight = 0
-                l_pixel, loss_dict = model(z, c=c, features_adapter=features_adapter)
+                l_pixel, loss_dict = model(z, c=c, features_adapter=features_adapter, t=t)
                 if now_data != 1:
                     for i, layer in enumerate(target_adapter[_]):
                         if i == 0:
@@ -398,7 +399,7 @@ if __name__ == '__main__':
                     elif opt.plms:
                         sampler = PLMSSampler(model)
                     else:
-                        sampler = DDIMSampler(model)
+                        sampler = DDIMSampler(model, model_ad)
                     for d_idx, data in enumerate(val_dataloader):
                         for v_idx in range(opt.n_samples):
                             c = model.get_learned_conditioning(data['sentence'])
@@ -407,7 +408,6 @@ if __name__ == '__main__':
                                 os.path.join(experiments_root, 'visualization',
                                              'target_after%02d_val%02d_id%02d.png' % (now_data, val_data, d_idx)),
                                 im_mask)
-                            features_adapter = model_ad(data['im'].to(device))
                             shape = [opt.C, opt.H // opt.f, opt.W // opt.f]
                             samples_ddim, _ = sampler.sample(S=opt.ddim_steps,
                                                              conditioning=c,
@@ -419,7 +419,7 @@ if __name__ == '__main__':
                                                                  [""]),
                                                              eta=opt.ddim_eta,
                                                              x_T=None,
-                                                             features_adapter=features_adapter)
+                                                             adapter_input=data['im'].to(device))
                             x_samples_ddim = model.decode_first_stage(samples_ddim)
                             x_samples_ddim = torch.clamp((x_samples_ddim + 1.0) / 2.0, min=0.0, max=1.0)
                             x_samples_ddim = x_samples_ddim.cpu().permute(0, 2, 3, 1).numpy()

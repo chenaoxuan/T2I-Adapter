@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 from collections import OrderedDict
+from ldm.modules.diffusionmodules.util import timestep_embedding
 from ldm.modules.extra_condition.api import ExtraCondition
 from ldm.modules.diffusionmodules.util import zero_module
 
@@ -61,7 +62,7 @@ class Downsample(nn.Module):
 
 
 class ResnetBlock(nn.Module):
-    def __init__(self, in_c, out_c, down, ksize=3, sk=False, use_conv=True):
+    def __init__(self, in_c, out_c, down, ksize=3, sk=False, use_conv=True, time_embed_dim=None):
         super().__init__()
         ps = ksize // 2
         if in_c != out_c or sk == False:
@@ -69,6 +70,7 @@ class ResnetBlock(nn.Module):
         else:
             # print('n_in')
             self.in_conv = None
+        self.time_embed = time_embed_dim is not None
         self.block1 = nn.Conv2d(out_c, out_c, 3, 1, 1)
         self.act = nn.ReLU()
         self.block2 = nn.Conv2d(out_c, out_c, ksize, 1, ps)
@@ -80,16 +82,30 @@ class ResnetBlock(nn.Module):
         self.down = down
         if self.down == True:
             self.down_opt = Downsample(in_c, use_conv=use_conv)
+        if time_embed_dim is not None:
+            self.emb_layers = nn.Sequential(
+                nn.SiLU(),
+                nn.Linear(
+                    time_embed_dim,
+                    out_c
+                ),
+            )
 
-    def forward(self, x):
+    def forward(self, x, emb=None):
         if self.down == True:
             x = self.down_opt(x)
         if self.in_conv is not None:  # edit
             x = self.in_conv(x)
 
         h = self.block1(x)
+        if emb is not None and self.time_embed:
+            emb_out = self.emb_layers(emb).type(h.dtype)
+            while len(emb_out.shape) < len(h.shape):
+                emb_out = emb_out[..., None]
+            h = h + emb_out
         h = self.act(h)
         h = self.block2(h)
+
         if self.skep is not None:
             return h + self.skep(x)
         else:
@@ -97,33 +113,47 @@ class ResnetBlock(nn.Module):
 
 
 class Adapter(nn.Module):
-    def __init__(self, channels=[320, 640, 1280, 1280], nums_rb=3, cin=64, ksize=3, sk=False, use_conv=True):
+    def __init__(self, channels=[320, 640, 1280, 1280], nums_rb=3, cin=64, ksize=3, sk=False, use_conv=True,
+                 time_embed_dim=None):
         super(Adapter, self).__init__()
         self.unshuffle = nn.PixelUnshuffle(8)
         self.channels = channels
         self.nums_rb = nums_rb
         self.body = []
+        self.time_embed = time_embed_dim is not None
         for i in range(len(channels)):
             for j in range(nums_rb):
                 if (i != 0) and (j == 0):
                     self.body.append(
-                        ResnetBlock(channels[i - 1], channels[i], down=True, ksize=ksize, sk=sk, use_conv=use_conv))
+                        ResnetBlock(channels[i - 1], channels[i], down=True, ksize=ksize, sk=sk, use_conv=use_conv,
+                                    time_embed_dim=time_embed_dim))
                 else:
                     self.body.append(
-                        ResnetBlock(channels[i], channels[i], down=False, ksize=ksize, sk=sk, use_conv=use_conv))
+                        ResnetBlock(channels[i], channels[i], down=False, ksize=ksize, sk=sk, use_conv=use_conv,
+                                    time_embed_dim=time_embed_dim))
         self.body = nn.ModuleList(self.body)
         self.conv_in = nn.Conv2d(cin, channels[0], 3, 1, 1)
+        if time_embed_dim is not None:
+            self.time_embed = nn.Sequential(
+                nn.Linear(320, time_embed_dim),
+                nn.SiLU(),
+                nn.Linear(time_embed_dim, time_embed_dim),
+            )
 
-    def forward(self, x):
+    def forward(self, x, timesteps=None):
         # unshuffle
         x = self.unshuffle(x)
         # extract features
         features = []
         x = self.conv_in(x)
+        emb = None
+        if timesteps is not None and self.time_embed:
+            t_emb = timestep_embedding(timesteps, 320, repeat_only=False)
+            emb = self.time_embed(t_emb)
         for i in range(len(self.channels)):
             for j in range(self.nums_rb):
                 idx = i * self.nums_rb + j
-                x = self.body[idx](x)
+                x = self.body[idx](x, emb)
             features.append(x)
 
         return features
@@ -243,9 +273,12 @@ class Adapter_light(nn.Module):
         self.body = []
         for i in range(len(channels)):
             if i == 0:
-                self.body.append(extractor(in_c=cin, inter_c=channels[i]//4, out_c=channels[i], nums_rb=nums_rb, down=False))
+                self.body.append(
+                    extractor(in_c=cin, inter_c=channels[i] // 4, out_c=channels[i], nums_rb=nums_rb, down=False))
             else:
-                self.body.append(extractor(in_c=channels[i-1], inter_c=channels[i]//4, out_c=channels[i], nums_rb=nums_rb, down=True))
+                self.body.append(
+                    extractor(in_c=channels[i - 1], inter_c=channels[i] // 4, out_c=channels[i], nums_rb=nums_rb,
+                              down=True))
         self.body = nn.ModuleList(self.body)
 
     def forward(self, x):
@@ -314,7 +347,8 @@ class CoAdapterFuser(nn.Module):
         for cond_name in features.keys():
             if not isinstance(features[cond_name], list):
                 length = features[cond_name].size(1)
-                transformed_feature = features[cond_name] * ((x[:, cur_seq_idx:cur_seq_idx+length] @ self.seq_proj) + 1)
+                transformed_feature = features[cond_name] * (
+                        (x[:, cur_seq_idx:cur_seq_idx + length] @ self.seq_proj) + 1)
                 if ret_feat_seq is None:
                     ret_feat_seq = transformed_feature
                 else:
@@ -325,7 +359,7 @@ class CoAdapterFuser(nn.Module):
             length = len(features[cond_name])
             transformed_feature_list = []
             for idx in range(length):
-                alpha = self.spatial_ch_projs[idx](x[:, cur_seq_idx+idx])
+                alpha = self.spatial_ch_projs[idx](x[:, cur_seq_idx + idx])
                 alpha = alpha.unsqueeze(-1).unsqueeze(-1) + 1
                 transformed_feature_list.append(features[cond_name][idx] * alpha)
             if ret_feat_map is None:

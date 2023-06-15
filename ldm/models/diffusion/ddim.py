@@ -9,11 +9,12 @@ from ldm.modules.diffusionmodules.util import make_ddim_sampling_parameters, mak
 
 
 class DDIMSampler(object):
-    def __init__(self, model, schedule="linear", **kwargs):
+    def __init__(self, model, adapter, schedule="linear", **kwargs):
         super().__init__()
         self.model = model
         self.ddpm_num_timesteps = model.num_timesteps
         self.schedule = schedule
+        self.adapter = adapter
 
     def register_buffer(self, name, attr):
         if type(attr) == torch.Tensor:
@@ -74,7 +75,7 @@ class DDIMSampler(object):
                log_every_t=100,
                unconditional_guidance_scale=1.,
                unconditional_conditioning=None,
-               features_adapter=None,
+               adapter_input=None,
                append_to_context=None,
                cond_tau=0.4,
                style_cond_tau=1.0,
@@ -110,7 +111,7 @@ class DDIMSampler(object):
                                                     log_every_t=log_every_t,
                                                     unconditional_guidance_scale=unconditional_guidance_scale,
                                                     unconditional_conditioning=unconditional_conditioning,
-                                                    features_adapter=features_adapter,
+                                                    adapter_input=adapter_input,
                                                     append_to_context=append_to_context,
                                                     cond_tau=cond_tau,
                                                     style_cond_tau=style_cond_tau,
@@ -123,7 +124,7 @@ class DDIMSampler(object):
                       callback=None, timesteps=None, quantize_denoised=False,
                       mask=None, x0=None, img_callback=None, log_every_t=100,
                       temperature=1., noise_dropout=0., score_corrector=None, corrector_kwargs=None,
-                      unconditional_guidance_scale=1., unconditional_conditioning=None, features_adapter=None,
+                      unconditional_guidance_scale=1., unconditional_conditioning=None, adapter_input=None,
                       append_to_context=None, cond_tau=0.4, style_cond_tau=1.0):
         device = self.model.betas.device
         b = shape[0]
@@ -160,8 +161,8 @@ class DDIMSampler(object):
                                       corrector_kwargs=corrector_kwargs,
                                       unconditional_guidance_scale=unconditional_guidance_scale,
                                       unconditional_conditioning=unconditional_conditioning,
-                                      features_adapter=None if index < int(
-                                          (1 - cond_tau) * total_steps) else features_adapter,
+                                      adapter_input=None if index < int(
+                                          (1 - cond_tau) * total_steps) else adapter_input,
                                       append_to_context=None if index < int(
                                           (1 - style_cond_tau) * total_steps) else append_to_context,
                                       )
@@ -178,10 +179,10 @@ class DDIMSampler(object):
     @torch.no_grad()
     def p_sample_ddim(self, x, c, t, index, repeat_noise=False, use_original_steps=False, quantize_denoised=False,
                       temperature=1., noise_dropout=0., score_corrector=None, corrector_kwargs=None,
-                      unconditional_guidance_scale=1., unconditional_conditioning=None, features_adapter=None,
+                      unconditional_guidance_scale=1., unconditional_conditioning=None, adapter_input=None,
                       append_to_context=None):
         b, *_, device = *x.shape, x.device
-
+        features_adapter = self.adapter(adapter_input, timesteps=t)
         if unconditional_conditioning is None or unconditional_guidance_scale == 1.:
             if append_to_context is not None:
                 model_output = self.model.apply_model(x, t, torch.cat([c, append_to_context], dim=1),

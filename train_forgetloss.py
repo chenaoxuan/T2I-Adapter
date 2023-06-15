@@ -3,7 +3,7 @@ Author:  Cax
 File:    train_subj.py
 Project: T2I-Adapter
 Time:    2023/4/5
-Des:     
+Des:
 """
 
 import cv2
@@ -11,7 +11,7 @@ import torch
 import os
 
 from basicsr.utils import img2tensor, tensor2img, scandir, get_time_str, get_root_logger, get_env_info
-from ldm.data.dataset_subject import dataset_subject
+from ldm.data.dataset_subject import dataset_continual
 import argparse
 from ldm.models.diffusion.ddim import DDIMSampler
 from ldm.models.diffusion.plms import PLMSSampler
@@ -225,35 +225,6 @@ if __name__ == '__main__':
         torch.backends.cudnn.benchmark = True
         torch.cuda.set_device(opt.local_rank)
 
-    # dataset
-    path_json_train = '/hy-tmp/all/dog_train1.json'
-    path_json_val = '/hy-tmp/all/dog_val1.json'
-    train_dataset = dataset_subject(
-        path_json=path_json_train,
-        image_size=512
-    )
-    if opt.distributed:
-        train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
-    else:
-        train_sampler = None
-    val_dataset = dataset_subject(
-        path_json=path_json_val,
-        image_size=512
-    )
-    train_dataloader = torch.utils.data.DataLoader(
-        train_dataset,
-        batch_size=opt.batch_size,
-        shuffle=(train_sampler is None),
-        num_workers=opt.num_workers,
-        pin_memory=True,
-        sampler=train_sampler)
-    val_dataloader = torch.utils.data.DataLoader(
-        val_dataset,
-        batch_size=1,
-        shuffle=False,
-        num_workers=1,
-        pin_memory=False)
-
     # stable diffusion
     model = load_model_from_config(config, f"{opt.ckpt}")
 
@@ -287,6 +258,7 @@ if __name__ == '__main__':
         mkdir_and_rename(experiments_root)
         start_epoch = 0
         current_iter = 0
+        start_data = 1
         # WARNING: should not use get_root_logger in the above codes, including the called functions
         # Otherwise the logger will not be properly initialized
         log_file = os.path.join(experiments_root, f"train_{opt.name}_{get_time_str()}.log")
@@ -306,105 +278,161 @@ if __name__ == '__main__':
         logger.info(f"Resuming training from epoch: {resume_state['epoch']}, " f"iter: {resume_state['iter']}.")
         start_epoch = resume_state['epoch']
         current_iter = resume_state['iter']
+        start_data = resume_state['data']
 
     # copy the yml file to the experiment root
     copy_opt_file(opt.config, experiments_root)
 
     # training
-    logger.info(f'Start training from epoch: {start_epoch}, iter: {current_iter}')
-    for epoch in range(start_epoch, opt.epochs):
+    logger.info(f'Start training from data:{start_data}, epoch: {start_epoch}, iter: {current_iter}')
+    for now_data in range(start_data, int(config.dataset.end_data) + 1):
+        train_dataset = dataset_continual(
+            path_json=config['dataset']['train_json_path'],
+            now_task=str(now_data),
+            image_size=512
+        )
         if opt.distributed:
-            train_dataloader.sampler.set_epoch(epoch)
-        # train
-        for _, data in enumerate(train_dataloader):
-            current_iter += 1
+            train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
+        else:
+            train_sampler = None
+        train_dataloader = torch.utils.data.DataLoader(
+            train_dataset,
+            batch_size=opt.batch_size,
+            shuffle=False,
+            num_workers=opt.num_workers,
+            pin_memory=True,
+            sampler=train_sampler)
+        if now_data != 1:
+            target_adapter = []
             with torch.no_grad():
-                if opt.distributed:
-                    c = model.module.get_learned_conditioning(data['sentence'])
-                    z = model.module.encode_first_stage((data['im'] * 2 - 1.).to(device))
-                    z = model.module.get_first_stage_encoding(z)
-                else:
-                    c = model.get_learned_conditioning(data['sentence'])
-                    z = model.encode_first_stage((data['im'] * 2 - 1.).to(device))
-                    z = model.get_first_stage_encoding(z)
-
-            optimizer.zero_grad()
-            model.zero_grad()
-            features_adapter = model_ad(data['im'].to(device))
-            l_pixel, loss_dict = model(z, c=c, features_adapter=features_adapter)
-            l_pixel.backward()
-            optimizer.step()
-
-            if (current_iter + 1) % opt.print_fq == 0:
-                logger.info(f"Epoch:{epoch}")
-                logger.info(loss_dict)
-
-            # save checkpoint
+                for _, data in enumerate(train_dataloader):
+                    target_adapter.append(model_ad(data['im'].to(device)))
+        for epoch in range(start_epoch, opt.epochs):
             if opt.distributed:
-                rank, _ = get_dist_info()
-            else:
-                rank = 0
-            if (rank == 0) and ((epoch + 1) % config['training']['save_freq_epoch'] == 0):
-                save_filename = f'model_ad_{epoch + 1}.pth'
-                save_path = os.path.join(experiments_root, 'models', save_filename)
-                save_dict = {}
-                model_ad_bare = get_bare_model(model_ad)
-                state_dict = model_ad_bare.state_dict()
-                for key, param in state_dict.items():
-                    if key.startswith('module.'):  # remove unnecessary 'module.'
-                        key = key[7:]
-                    save_dict[key] = param.cpu()
-                torch.save(save_dict, save_path)
-                # save state
-                state = {'epoch': epoch, 'iter': current_iter + 1, 'optimizers': optimizer.state_dict()}
-                save_filename = f'{epoch + 1}.state'
-                save_path = os.path.join(experiments_root, 'training_states', save_filename)
-                torch.save(state, save_path)
+                train_dataloader.sampler.set_epoch(epoch)
+            # train
+            for _, data in enumerate(train_dataloader):
+                current_iter += 1
+                with torch.no_grad():
+                    if opt.distributed:
+                        c = model.module.get_learned_conditioning(data['sentence'])
+                        z = model.module.encode_first_stage((data['im'] * 2 - 1.).to(device))
+                        z = model.module.get_first_stage_encoding(z)
+                    else:
+                        c = model.get_learned_conditioning(data['sentence'])
+                        z = model.encode_first_stage((data['im'] * 2 - 1.).to(device))
+                        z = model.get_first_stage_encoding(z)
 
-        # val
+                optimizer.zero_grad()
+                model.zero_grad()
+                features_adapter = model_ad(data['im'].to(device))
+                forget_scale_weight = (0.25, 0.25, 0.25, 0.25)
+                l_forget_weight = 0
+                l_pixel, loss_dict = model(z, c=c, features_adapter=features_adapter)
+                if now_data != 1:
+                    for i, layer in enumerate(target_adapter[_]):
+                        if i == 0:
+                            l_forget = torch.nn.functional.mse_loss(layer, features_adapter[i]) * forget_scale_weight[i]
+                        else:
+                            l_forget += torch.nn.functional.mse_loss(layer, features_adapter[i]) * forget_scale_weight[
+                                i]
+                    # print(f"l_forget: {l_forget},now_data:{now_data}, epoch:{epoch}")
+                    l_pixel += l_forget_weight * l_forget
+
+                l_pixel.backward()
+                optimizer.step()
+
+                if (current_iter + 1) % opt.print_fq == 0:
+                    logger.info(f"Data:{now_data}, Epoch:{epoch}")
+                    for t in loss_dict:
+                        loss_dict[t] = round(loss_dict[t].item(), 6)
+                    if now_data != 1:
+                        loss_dict['loss_forget'] = round(l_forget.item(), 6)
+                    # val/loss_simple is rebuild loss, val/loss is loss_simple + loss_forget
+                    logger.info(loss_dict)
+
+                # save checkpoint
+                if opt.distributed:
+                    rank, _ = get_dist_info()
+                else:
+                    rank = 0
+                if (rank == 0) and ((epoch + 1) % config['training']['save_freq_epoch'] == 0):
+                    save_filename = f'model_ad_{epoch + 1}.pth'
+                    save_path = os.path.join(experiments_root, 'models', save_filename)
+                    save_dict = {}
+                    model_ad_bare = get_bare_model(model_ad)
+                    state_dict = model_ad_bare.state_dict()
+                    for key, param in state_dict.items():
+                        if key.startswith('module.'):  # remove unnecessary 'module.'
+                            key = key[7:]
+                        save_dict[key] = param.cpu()
+                    torch.save(save_dict, save_path)
+                    # save state
+                    state = {'data': now_data, 'epoch': epoch, 'iter': current_iter + 1,
+                             'optimizers': optimizer.state_dict()}
+                    save_filename = f'{epoch + 1}.state'
+                    save_path = os.path.join(experiments_root, 'training_states', save_filename)
+                    torch.save(state, save_path)
+
+            # val
         if opt.distributed:
             rank, _ = get_dist_info()
         else:
             rank = 0
-        if rank == 0 and (epoch + 1) % config['training']['val_freq_epoch'] == 0:
-            # if rank == 0:
-            with torch.no_grad():
-                if opt.dpm_solver:
-                    sampler = DPMSolverSampler(model)
-                elif opt.plms:
-                    sampler = PLMSSampler(model)
-                else:
-                    sampler = DDIMSampler(model)
-                for d_idx, data in enumerate(val_dataloader):
-                    for v_idx in range(opt.n_samples):
-                        c = model.get_learned_conditioning(data['sentence'])
-                        im_mask = tensor2img(data['im'])
-                        cv2.imwrite(
-                            os.path.join(experiments_root, 'visualization', 'subj_%04d_%02d.png' % (epoch, d_idx)),
-                            im_mask)
-                        features_adapter = model_ad(data['im'].to(device))
-                        shape = [opt.C, opt.H // opt.f, opt.W // opt.f]
-                        samples_ddim, _ = sampler.sample(S=opt.ddim_steps,
-                                                         conditioning=c,
-                                                         batch_size=1,
-                                                         shape=shape,
-                                                         verbose=False,
-                                                         unconditional_guidance_scale=opt.scale,
-                                                         unconditional_conditioning=model.get_learned_conditioning(
-                                                             [""]),
-                                                         eta=opt.ddim_eta,
-                                                         x_T=None,
-                                                         adapter_input=features_adapter)
-                        x_samples_ddim = model.decode_first_stage(samples_ddim)
-                        x_samples_ddim = torch.clamp((x_samples_ddim + 1.0) / 2.0, min=0.0, max=1.0)
-                        x_samples_ddim = x_samples_ddim.cpu().permute(0, 2, 3, 1).numpy()
-                        for id_sample, x_sample in enumerate(x_samples_ddim):
-                            x_sample = 255. * x_sample
-                            img = x_sample.astype(np.uint8)
-                            img = cv2.putText(img.copy(), data['sentence'][0], (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
-                                              (0, 255, 0), 2)
-                            cv2.imwrite(os.path.join(experiments_root, 'visualization',
-                                                     'sample_e%04d_d%02d_s%04d.png' % (epoch, d_idx, v_idx)),
-                                        img[:, :, ::-1])
-
-#
+        if rank == 0:
+            for val_data in range(1, now_data + 1):
+                val_dataset = dataset_continual(
+                    path_json=config['dataset']['val_json_path'],
+                    now_task=str(val_data),
+                    image_size=512
+                )
+                val_dataloader = torch.utils.data.DataLoader(
+                    val_dataset,
+                    batch_size=1,
+                    shuffle=False,
+                    num_workers=1,
+                    pin_memory=False)
+                with torch.no_grad():
+                    if opt.dpm_solver:
+                        sampler = DPMSolverSampler(model)
+                    elif opt.plms:
+                        sampler = PLMSSampler(model)
+                    else:
+                        sampler = DDIMSampler(model)
+                    for d_idx, data in enumerate(val_dataloader):
+                        for v_idx in range(opt.n_samples):
+                            c = model.get_learned_conditioning(data['sentence'])
+                            im_mask = tensor2img(data['im'])
+                            cv2.imwrite(
+                                os.path.join(experiments_root, 'visualization',
+                                             'target_after%02d_val%02d_id%02d.png' % (now_data, val_data, d_idx)),
+                                im_mask)
+                            features_adapter = model_ad(data['im'].to(device))
+                            shape = [opt.C, opt.H // opt.f, opt.W // opt.f]
+                            samples_ddim, _ = sampler.sample(S=opt.ddim_steps,
+                                                             conditioning=c,
+                                                             batch_size=1,
+                                                             shape=shape,
+                                                             verbose=False,
+                                                             unconditional_guidance_scale=opt.scale,
+                                                             unconditional_conditioning=model.get_learned_conditioning(
+                                                                 [""]),
+                                                             eta=opt.ddim_eta,
+                                                             x_T=None,
+                                                             adapter_input=features_adapter)
+                            x_samples_ddim = model.decode_first_stage(samples_ddim)
+                            x_samples_ddim = torch.clamp((x_samples_ddim + 1.0) / 2.0, min=0.0, max=1.0)
+                            x_samples_ddim = x_samples_ddim.cpu().permute(0, 2, 3, 1).numpy()
+                            for id_sample, x_sample in enumerate(x_samples_ddim):
+                                x_sample = 255. * x_sample
+                                img = x_sample.astype(np.uint8)
+                                img = cv2.putText(img.copy(), data['sentence'][0], (10, 30),
+                                                  cv2.FONT_HERSHEY_SIMPLEX,
+                                                  0.5,
+                                                  (0, 255, 0), 2)
+                                cv2.imwrite(os.path.join(experiments_root, 'visualization',
+                                                         'sample_after%02d_val%02d_id%02d_sample%02d.png' % (now_data,
+                                                                                                             val_data,
+                                                                                                             d_idx,
+                                                                                                             v_idx)),
+                                            img[:, :, ::-1])

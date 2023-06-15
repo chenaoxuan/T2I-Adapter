@@ -352,15 +352,15 @@ if __name__ == '__main__':
                     features_adapter = model_ad(mask)
                     shape = [opt.C, opt.H // opt.f, opt.W // opt.f]
                     samples_ddim, _ = sampler.sample(S=opt.ddim_steps,
-                                                        conditioning=c,
-                                                        batch_size=opt.n_samples,
-                                                        shape=shape,
-                                                        verbose=False,
-                                                        unconditional_guidance_scale=opt.scale,
-                                                        unconditional_conditioning=model.module.get_learned_conditioning(opt.n_samples * [""]),
-                                                        eta=opt.ddim_eta,
-                                                        x_T=None,
-                                                        features_adapter=features_adapter)
+                                                     conditioning=c,
+                                                     batch_size=opt.n_samples,
+                                                     shape=shape,
+                                                     verbose=False,
+                                                     unconditional_guidance_scale=opt.scale,
+                                                     unconditional_conditioning=model.module.get_learned_conditioning(opt.n_samples * [""]),
+                                                     eta=opt.ddim_eta,
+                                                     x_T=None,
+                                                     adapter_input=features_adapter)
                     x_samples_ddim = model.module.decode_first_stage(samples_ddim)
                     x_samples_ddim = torch.clamp((x_samples_ddim + 1.0) / 2.0, min=0.0, max=1.0)
                     x_samples_ddim = x_samples_ddim.cpu().permute(0, 2, 3, 1).numpy()
