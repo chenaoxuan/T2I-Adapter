@@ -9,12 +9,11 @@ from ldm.modules.diffusionmodules.util import make_ddim_sampling_parameters, mak
 
 
 class DDIMSampler(object):
-    def __init__(self, model, adapter, schedule="linear", **kwargs):
+    def __init__(self, model, schedule="linear", **kwargs):
         super().__init__()
         self.model = model
         self.ddpm_num_timesteps = model.num_timesteps
         self.schedule = schedule
-        self.adapter = adapter
 
     def register_buffer(self, name, attr):
         if type(attr) == torch.Tensor:
@@ -58,6 +57,7 @@ class DDIMSampler(object):
                S,
                batch_size,
                shape,
+               data_idx,
                conditioning=None,
                callback=None,
                normals_sequence=None,
@@ -75,9 +75,8 @@ class DDIMSampler(object):
                log_every_t=100,
                unconditional_guidance_scale=1.,
                unconditional_conditioning=None,
-               adapter_input=None,
+               features_adapter=True,
                append_to_context=None,
-               cond_tau=0.4,
                style_cond_tau=1.0,
                # this has to come in the same format as the conditioning, # e.g. as encoded tokens, ...
                **kwargs
@@ -111,21 +110,21 @@ class DDIMSampler(object):
                                                     log_every_t=log_every_t,
                                                     unconditional_guidance_scale=unconditional_guidance_scale,
                                                     unconditional_conditioning=unconditional_conditioning,
-                                                    adapter_input=adapter_input,
+                                                    features_adapter=features_adapter,
+                                                    data_idx=data_idx,
                                                     append_to_context=append_to_context,
-                                                    cond_tau=cond_tau,
                                                     style_cond_tau=style_cond_tau,
                                                     )
         return samples, intermediates
 
     @torch.no_grad()
-    def ddim_sampling(self, cond, shape,
+    def ddim_sampling(self, cond, shape, data_idx,
                       x_T=None, ddim_use_original_steps=False,
                       callback=None, timesteps=None, quantize_denoised=False,
                       mask=None, x0=None, img_callback=None, log_every_t=100,
                       temperature=1., noise_dropout=0., score_corrector=None, corrector_kwargs=None,
-                      unconditional_guidance_scale=1., unconditional_conditioning=None, adapter_input=None,
-                      append_to_context=None, cond_tau=0.4, style_cond_tau=1.0):
+                      unconditional_guidance_scale=1., unconditional_conditioning=None, features_adapter=True,
+                      append_to_context=None, style_cond_tau=1.0):
         device = self.model.betas.device
         b = shape[0]
         if x_T is None:
@@ -161,8 +160,8 @@ class DDIMSampler(object):
                                       corrector_kwargs=corrector_kwargs,
                                       unconditional_guidance_scale=unconditional_guidance_scale,
                                       unconditional_conditioning=unconditional_conditioning,
-                                      adapter_input=None if index < int(
-                                          (1 - cond_tau) * total_steps) else adapter_input,
+                                      features_adapter=features_adapter,
+                                      data_idx=data_idx,
                                       append_to_context=None if index < int(
                                           (1 - style_cond_tau) * total_steps) else append_to_context,
                                       )
@@ -177,18 +176,17 @@ class DDIMSampler(object):
         return img, intermediates
 
     @torch.no_grad()
-    def p_sample_ddim(self, x, c, t, index, repeat_noise=False, use_original_steps=False, quantize_denoised=False,
+    def p_sample_ddim(self, x, c, t, index,data_idx, repeat_noise=False, use_original_steps=False, quantize_denoised=False,
                       temperature=1., noise_dropout=0., score_corrector=None, corrector_kwargs=None,
-                      unconditional_guidance_scale=1., unconditional_conditioning=None, adapter_input=None,
+                      unconditional_guidance_scale=1., unconditional_conditioning=None, features_adapter=True,
                       append_to_context=None):
         b, *_, device = *x.shape, x.device
-        features_adapter = self.adapter(adapter_input, timesteps=t) if adapter_input is not None else None
         if unconditional_conditioning is None or unconditional_guidance_scale == 1.:
             if append_to_context is not None:
                 model_output = self.model.apply_model(x, t, torch.cat([c, append_to_context], dim=1),
-                                                      features_adapter=features_adapter)
+                                                      features_adapter=features_adapter,data_idx=data_idx)
             else:
-                model_output = self.model.apply_model(x, t, c, features_adapter=features_adapter)
+                model_output = self.model.apply_model(x, t, c, features_adapter=features_adapter,data_idx=data_idx)
         else:
             x_in = torch.cat([x] * 2)
             t_in = torch.cat([t] * 2)
@@ -218,7 +216,7 @@ class DDIMSampler(object):
                     c_in = torch.cat([new_unconditional_conditioning, new_c])
                 else:
                     c_in = torch.cat([unconditional_conditioning, c])
-            model_uncond, model_t = self.model.apply_model(x_in, t_in, c_in, features_adapter=features_adapter).chunk(2)
+            model_uncond, model_t = self.model.apply_model(x_in, t_in, c_in, features_adapter=features_adapter,data_idx=data_idx).chunk(2)
             model_output = model_uncond + unconditional_guidance_scale * (model_t - model_uncond)
 
         if self.model.parameterization == "v":

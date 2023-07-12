@@ -167,7 +167,7 @@ def load_model_from_config(config, ckpt, vae_ckpt=None, verbose=False):
             print(u)
 
     # model.cuda()
-    model.eval()
+    # model.eval() //尽在train_continualadapter.py中关闭
     return model
 
 
