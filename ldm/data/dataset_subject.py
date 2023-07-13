@@ -43,7 +43,7 @@ class dataset_continual(Dataset):
         im = cv2.imread(os.path.join(self.root_path_im, name.replace('.png', 'jpg')))
         im = cv2.resize(im, (self.image_size, self.image_size))
         im = img2tensor(im, bgr2rgb=True, float32=True) / 255.
-        return {'im': im, 'sentence': self.caption[self.now_task]}
+        return {'im': im, 'sentence': self.caption[self.now_task][idx]}
 
     def __len__(self):
         return len(self.files[self.now_task])

@@ -21,7 +21,7 @@ import logging
 from dist_util import init_dist, master_only, get_bare_model, get_dist_info
 from ldm.util import load_model_from_config
 
-#需要在ldm/util中关闭对整个模型的eval
+
 @master_only
 def mkdir_and_rename(path):
     """mkdirs. If path exists, rename it with timestamp and create a new one.
@@ -220,27 +220,14 @@ if __name__ == '__main__':
     # stable diffusion
     model = load_model_from_config(config, f"{opt.ckpt}")
 
-    # subject encoder
-    model_ad = Adapter(cin=int(3 * 64), channels=[320, 640, 1280, 1280][:4], nums_rb=2, ksize=1, sk=True,
-                       use_conv=False)
-
     # to gpus
     if opt.distributed:
-        model_ad = torch.nn.parallel.DistributedDataParallel(
-            model_ad,
-            device_ids=[opt.local_rank],
-            output_device=opt.local_rank)
         model = torch.nn.parallel.DistributedDataParallel(
             model,
             device_ids=[opt.local_rank],
             output_device=opt.local_rank)
     else:
-        model_ad = model_ad.to(device)
         model = model.to(device)
-
-    # optimizer
-    params = list(model_ad.parameters())
-    optimizer = torch.optim.AdamW(params, lr=config['training']['lr'])
 
     experiments_root = os.path.join('experiments', opt.name)
 
@@ -265,8 +252,7 @@ if __name__ == '__main__':
         logger.info(get_env_info())
         logger.info(dict2str(config))
         resume_optimizers = resume_state['optimizers']
-        optimizer.load_state_dict(resume_optimizers)
-        model_ad.load_state_dict(resume_ad)
+        # optimizer.load_state_dict(resume_optimizers)
         logger.info(f"Resuming training from epoch: {resume_state['epoch']}, " f"iter: {resume_state['iter']}.")
         start_epoch = resume_state['epoch']
         current_iter = resume_state['iter']
@@ -305,6 +291,10 @@ if __name__ == '__main__':
             shuffle=False,
             num_workers=1,
             pin_memory=False)
+        model.model.diffusion_model.adapter.before_train(data_idx=now_data, device=device)
+        # optimizer
+        params = list(model.model.diffusion_model.adapter.parameters())
+        optimizer = torch.optim.AdamW(params, lr=config['training']['lr'])
         for epoch in range(start_epoch, opt.epochs):
             if opt.distributed:
                 train_dataloader.sampler.set_epoch(epoch)
@@ -323,8 +313,7 @@ if __name__ == '__main__':
 
                 optimizer.zero_grad()
                 model.zero_grad()
-                features_adapter = model_ad(data['im'].to(device))
-                l_pixel, loss_dict = model(z, c=c, features_adapter=features_adapter)
+                l_pixel, loss_dict = model(z, c=c, features_adapter=True, data_idx=now_data)
                 l_pixel.backward()
                 optimizer.step()
 
@@ -343,19 +332,19 @@ if __name__ == '__main__':
                     save_filename = f'model_ad_{epoch + 1}.pth'
                     save_path = os.path.join(experiments_root, 'models', save_filename)
                     save_dict = {}
-                    model_ad_bare = get_bare_model(model_ad)
-                    state_dict = model_ad_bare.state_dict()
-                    for key, param in state_dict.items():
-                        if key.startswith('module.'):  # remove unnecessary 'module.'
-                            key = key[7:]
-                        save_dict[key] = param.cpu()
-                    torch.save(save_dict, save_path)
-                    # save state
-                    state = {'data': now_data, 'epoch': epoch, 'iter': current_iter + 1,
-                             'optimizers': optimizer.state_dict()}
-                    save_filename = f'{epoch + 1}.state'
-                    save_path = os.path.join(experiments_root, 'training_states', save_filename)
-                    torch.save(state, save_path)
+                    # model_ad_bare = get_bare_model(model_ad)
+                    # state_dict = model_ad_bare.state_dict()
+                    # for key, param in state_dict.items():
+                    #     if key.startswith('module.'):  # remove unnecessary 'module.'
+                    #         key = key[7:]
+                    #     save_dict[key] = param.cpu()
+                    # torch.save(save_dict, save_path)
+                    # # save state
+                    # state = {'data': now_data, 'epoch': epoch, 'iter': current_iter + 1,
+                    #          'optimizers': optimizer.state_dict()}
+                    # save_filename = f'{epoch + 1}.state'
+                    # save_path = os.path.join(experiments_root, 'training_states', save_filename)
+                    # torch.save(state, save_path)
 
             # val
             if opt.distributed:
@@ -376,11 +365,11 @@ if __name__ == '__main__':
                             im_mask = tensor2img(data['im'])
                             cv2.imwrite(
                                 os.path.join(experiments_root, 'visualization',
-                                             'subj_%04d_%02d.png' % (epoch, d_idx)),
+                                             'subj_%04d_%03d_%02d.png' % (epoch, now_data, d_idx)),
                                 im_mask)
-                            features_adapter = model_ad(data['im'].to(device))
                             shape = [opt.C, opt.H // opt.f, opt.W // opt.f]
                             samples_ddim, _ = sampler.sample(S=opt.ddim_steps,
+                                                             data_idx=now_data,
                                                              conditioning=c,
                                                              batch_size=1,
                                                              shape=shape,
@@ -390,7 +379,7 @@ if __name__ == '__main__':
                                                                  [""]),
                                                              eta=opt.ddim_eta,
                                                              x_T=None,
-                                                             adapter_input=features_adapter)
+                                                             adapter_input=True)
                             x_samples_ddim = model.decode_first_stage(samples_ddim)
                             x_samples_ddim = torch.clamp((x_samples_ddim + 1.0) / 2.0, min=0.0, max=1.0)
                             x_samples_ddim = x_samples_ddim.cpu().permute(0, 2, 3, 1).numpy()
@@ -402,5 +391,6 @@ if __name__ == '__main__':
                                                   0.5,
                                                   (0, 255, 0), 2)
                                 cv2.imwrite(os.path.join(experiments_root, 'visualization',
-                                                         'sample_e%04d_d%02d_s%04d.png' % (epoch, d_idx, v_idx)),
+                                                         'sample_d%03d_e%04d_v%02d_s%04d.png' % (
+                                                             now_data, epoch, d_idx, v_idx)),
                                             img[:, :, ::-1])
