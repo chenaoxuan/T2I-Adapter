@@ -11,11 +11,11 @@ from ldm.metrics.clip import ClipImageFeature
 from ldm.metrics.mmd import mmd
 
 tar_path = 'C:\\Users\\cax11\\Desktop\\test\\continual_dog'
-t1_path = [os.path.join(tar_path, str(i).zfill(2) + '.jpg') for i in range(5)]
-t2_path = [os.path.join(tar_path, str(i).zfill(2) + '.jpg') for i in range(5, 11)]
-t3_path = [os.path.join(tar_path, str(i).zfill(2) + '.jpg') for i in range(11, 15)]
+t1_path = [os.path.join(tar_path, str(i).zfill(2) + '.jpg') for i in range(0,1)]
+t2_path = [os.path.join(tar_path, str(i).zfill(2) + '.jpg') for i in range(5,6)]
+t3_path = [os.path.join(tar_path, str(i).zfill(2) + '.jpg') for i in range(11,12)]
 
-clip = ClipImageFeature(pretrained_model_name_or_path='F:\\Clip-Vit-Large-Patch14')
+clip = ClipImageFeature(pretrained_model_name_or_path='F:\\Weight\\Clip-Vit-Large-Patch14')
 t1 = clip(path=t1_path)
 t2 = clip(path=t2_path)
 t3 = clip(path=t3_path)

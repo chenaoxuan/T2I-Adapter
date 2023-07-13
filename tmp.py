@@ -291,7 +291,7 @@ if __name__ == '__main__':
             shuffle=False,
             num_workers=1,
             pin_memory=False)
-        model.model.diffusion_model.adapter.before_train(data_idx=now_data,device=device)
+        model.model.diffusion_model.adapter.before_train(data_idx=now_data, device=device)
         # optimizer
         params = list(model.model.diffusion_model.adapter.parameters())
         optimizer = torch.optim.AdamW(params, lr=config['training']['lr'])
@@ -365,7 +365,7 @@ if __name__ == '__main__':
                             im_mask = tensor2img(data['im'])
                             cv2.imwrite(
                                 os.path.join(experiments_root, 'visualization',
-                                             'subj_%04d_%02d.png' % (epoch, d_idx)),
+                                             'subj_%04d_%03d_%02d.png' % (epoch, now_data, d_idx)),
                                 im_mask)
                             shape = [opt.C, opt.H // opt.f, opt.W // opt.f]
                             samples_ddim, _ = sampler.sample(S=opt.ddim_steps,
@@ -391,5 +391,6 @@ if __name__ == '__main__':
                                                   0.5,
                                                   (0, 255, 0), 2)
                                 cv2.imwrite(os.path.join(experiments_root, 'visualization',
-                                                         'sample_e%04d_d%02d_s%04d.png' % (epoch, d_idx, v_idx)),
+                                                         'sample_e%04d_d%03d_v%02d_s%04d.png' % (
+                                                             epoch, now_data, d_idx, v_idx)),
                                             img[:, :, ::-1])
