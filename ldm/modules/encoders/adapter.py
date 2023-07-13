@@ -180,28 +180,29 @@ class ContinualAdapter(nn.Module):
                 nn.Linear(time_embed_dim, time_embed_dim),
             )
 
-    def creat_block(self):
+    def creat_block(self,device):
         for i in range(len(self.channels)):
             for j in range(self.nums_rb):
                 self.body[str(i)].append(
-                    ResnetBlock(self.channels[i], self.channels[i], down=False, ksize=self.ksize,
+                    ResnetBlock(self.channels[i], self.channels[i], down=False, ksize=self.ksize,sk=True,
                                 use_conv=self.use_conv,
-                                time_embed_dim=self.time_embed_dim))
+                                time_embed_dim=self.time_embed_dim).to(device))
         self.num += 1
 
-    def before_train(self, data_idx):
+    def before_train(self, data_idx,device):
         if data_idx > self.num:
             assert data_idx == self.num + 1, "The amount of data does not match the number of blocks"
-            self.creat_block()
+            self.creat_block(device)
         freeze_idx = data_idx - 1
         for i in range(len(self.channels)):
             for j in range(freeze_idx * self.nums_rb):
                 for param in self.body[str(i)][j].parameters():
                     param.requires_grad = False
-            for j in range((data_idx-1) * self.nums_rb,data_idx * self.nums_rb):
+            for j in range((data_idx - 1) * self.nums_rb, data_idx * self.nums_rb):
                 for param in self.body[str(i)][j].parameters():
                     param.requires_grad = True
-    def forward(self, x, data_idx, channel_idx, timesteps=None):
+
+    def forward(self, x, data_idx, channel_idx, timesteps=None, **kwargs):
         emb = None
         if timesteps is not None and self.time_embed:
             t_emb = timestep_embedding(timesteps, 320, repeat_only=False)

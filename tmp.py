@@ -229,8 +229,6 @@ if __name__ == '__main__':
     else:
         model = model.to(device)
 
-
-
     experiments_root = os.path.join('experiments', opt.name)
 
     # resume state
@@ -293,7 +291,7 @@ if __name__ == '__main__':
             shuffle=False,
             num_workers=1,
             pin_memory=False)
-        model.model.diffusion_model.adapter.before_train(data_idx=now_data)
+        model.model.diffusion_model.adapter.before_train(data_idx=now_data,device=device)
         # optimizer
         params = list(model.model.diffusion_model.adapter.parameters())
         optimizer = torch.optim.AdamW(params, lr=config['training']['lr'])
@@ -371,6 +369,7 @@ if __name__ == '__main__':
                                 im_mask)
                             shape = [opt.C, opt.H // opt.f, opt.W // opt.f]
                             samples_ddim, _ = sampler.sample(S=opt.ddim_steps,
+                                                             data_idx=now_data,
                                                              conditioning=c,
                                                              batch_size=1,
                                                              shape=shape,

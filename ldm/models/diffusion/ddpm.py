@@ -27,7 +27,6 @@ from ldm.models.autoencoder import IdentityFirstStage, AutoencoderKL
 from ldm.modules.diffusionmodules.util import make_beta_schedule, extract_into_tensor, noise_like
 from ldm.models.diffusion.ddim import DDIMSampler
 
-
 __conditioning_keys__ = {'concat': 'c_concat',
                          'crossattn': 'c_crossattn',
                          'adm': 'y'}
@@ -112,7 +111,8 @@ class DDPM(pl.LightningModule):
             self.init_from_ckpt(ckpt_path, ignore_keys=ignore_keys, only_model=load_only_unet)
             if reset_ema:
                 assert self.use_ema
-                print(f"Resetting ema to pure model weights. This is useful when restoring from an ema-only checkpoint.")
+                print(
+                    f"Resetting ema to pure model weights. This is useful when restoring from an ema-only checkpoint.")
                 self.model_ema = LitEma(self.model)
         if reset_num_ema_updates:
             print(" +++++++++++ WARNING: RESETTING NUM_EMA UPDATES TO ZERO +++++++++++ ")
@@ -809,7 +809,7 @@ class LatentDiffusion(DDPM):
         if scheduler == 'linear':
             t = torch.randint(0, self.num_timesteps, (bs,), device=self.device).long()
         elif scheduler == 'cosine':
-            t = torch.rand((bs, ), device=self.device)
+            t = torch.rand((bs,), device=self.device)
             t = torch.cos(torch.pi / 2. * t) * self.num_timesteps
             t = t.long()
         elif scheduler == 'cubic':
@@ -818,12 +818,12 @@ class LatentDiffusion(DDPM):
             t = t.long()
         else:
             raise NotImplementedError
-        t = torch.clamp(t, min=0, max=self.num_timesteps-1)
+        t = torch.clamp(t, min=0, max=self.num_timesteps - 1)
         return t
 
     def forward(self, x, c, *args, **kwargs):
         if 't' not in kwargs:
-            t = torch.randint(0, self.num_timesteps, (x.shape[0], ), device=self.device).long()
+            t = torch.randint(0, self.num_timesteps, (x.shape[0],), device=self.device).long()
         else:
             t = kwargs.pop('t')
 
@@ -848,7 +848,7 @@ class LatentDiffusion(DDPM):
 
     def _predict_eps_from_xstart(self, x_t, t, pred_xstart):
         return (extract_into_tensor(self.sqrt_recip_alphas_cumprod, t, x_t.shape) * x_t - pred_xstart) / \
-               extract_into_tensor(self.sqrt_recipm1_alphas_cumprod, t, x_t.shape)
+            extract_into_tensor(self.sqrt_recipm1_alphas_cumprod, t, x_t.shape)
 
     def _prior_bpd(self, x_start):
         """

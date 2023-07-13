@@ -1149,8 +1149,8 @@ class UNetModelAdapter(nn.Module):
         self.middle_block.apply(convert_module_to_f32)
         self.output_blocks.apply(convert_module_to_f32)
 
-    def forward(self, x, data_idx, timesteps=None, context=None, y=None, features_adapter=True, append_to_context=None,
-                **kwargs):
+    def forward(self, x, timesteps=None, context=None, y=None, features_adapter=True, append_to_context=None,
+                data_idx=None):
         """
         Apply the model to an input batch.
         :param x: an [N x C x ...] Tensor of inputs.
@@ -1179,11 +1179,9 @@ class UNetModelAdapter(nn.Module):
         for id, module in enumerate(self.input_blocks):
             h = module(h, emb, context)
             if ((id + 1) % 3 == 0) and features_adapter:
-                h = h + self.adapter(h, channel_dix=adapter_idx, data_idx=data_idx)
+                h = h + self.adapter(h, data_idx, adapter_idx)
                 adapter_idx += 1
             hs.append(h)
-        if features_adapter is not None:
-            assert len(features_adapter) == adapter_idx, 'Wrong features_adapter'
 
         h = self.middle_block(h, emb, context)
         for module in self.output_blocks:

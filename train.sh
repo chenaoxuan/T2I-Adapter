@@ -32,6 +32,8 @@ unzip sd-v1-4.zip
 unzip -d all all.zip
 unzip -d continual_dog continual_dog.zip
 
+cd hy-tmp
+cd hy-tmp/T2I-Adapter
 
 
 zip -r train_subj.zip train_subj/
