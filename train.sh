@@ -37,3 +37,4 @@ cd hy-tmp/T2I-Adapter
 
 
 zip -r train_subj.zip train_subj/
+zip -r all.zip train_subj/
