@@ -1176,19 +1176,17 @@ class UNetModelAdapter(nn.Module):
             context = torch.cat([context, append_to_context], dim=1)
 
         adapter_idx = 0
-        pre_loss=[]
+        pre_loss = []
         for id, module in enumerate(self.input_blocks):
             h = module(h, emb, context)
             if ((id + 1) % 3 == 0) and features_adapter:
                 now_feature = self.adapter(h, data_idx, adapter_idx)
-                if require_pre_loss:
+                if require_pre_loss and data_idx != 1:
                     pre_features = self.adapter.get_pre_feature(h, data_idx, adapter_idx)
-                    for lt,pre_feature in enumerate(pre_features):
-                        if lt==0:
-                            tmp_loss=torch.nn.functional.mse_loss(pre_feature,now_feature)
-                        else:
-                            tmp_loss+=torch.nn.functional.mse_loss(pre_feature,now_feature)
-                    pre_loss.append(tmp_loss/len(pre_features))
+                    tmp_loss = 0
+                    for lt, pre_feature in enumerate(pre_features):
+                        tmp_loss += torch.nn.functional.mse_loss(pre_feature, now_feature)
+                    pre_loss.append(tmp_loss / len(pre_features))
                 h = h + now_feature
                 adapter_idx += 1
             hs.append(h)
