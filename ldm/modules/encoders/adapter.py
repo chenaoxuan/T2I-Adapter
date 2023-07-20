@@ -213,7 +213,7 @@ class ContinualAdapter(nn.Module):
         for idx in range((end_data - 1) * self.nums_rb):
             x = self.body[str(channel_idx)][idx](x, emb)
             if (idx + 1) % self.nums_rb == 0:
-                pre_features[channel_idx].append(x)
+                pre_features.append(x)
         return pre_features
 
     def forward(self, x, data_idx, channel_idx, timesteps=None, **kwargs):

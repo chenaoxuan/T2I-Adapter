@@ -273,11 +273,6 @@ if __name__ == '__main__':
             train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
         else:
             train_sampler = None
-        val_dataset = dataset_continual(
-            path_json=config['dataset']['val_json_path'],
-            now_task=str(now_data),
-            image_size=512
-        )
         train_dataloader = torch.utils.data.DataLoader(
             train_dataset,
             batch_size=opt.batch_size,
@@ -285,12 +280,7 @@ if __name__ == '__main__':
             num_workers=opt.num_workers,
             pin_memory=True,
             sampler=train_sampler)
-        val_dataloader = torch.utils.data.DataLoader(
-            val_dataset,
-            batch_size=1,
-            shuffle=False,
-            num_workers=1,
-            pin_memory=False)
+
         model.model.diffusion_model.adapter.before_train(data_idx=now_data, device=device)
         # optimizer
         params = list(model.model.diffusion_model.adapter.parameters())
@@ -313,7 +303,18 @@ if __name__ == '__main__':
 
                 optimizer.zero_grad()
                 model.zero_grad()
-                l_pixel, loss_dict = model(z, c=c, features_adapter=True, data_idx=now_data)
+                l_pixel, pre_losses, loss_dict = model(z, c=c, features_adapter=True, data_idx=now_data)
+                scale_weight = (0.25, 0.25, 0.25, 0.25)
+                l_forget_weight = 0
+                if now_data != 1:
+                    for i, tmp_loss in enumerate(pre_losses):
+                        if i == 0:
+                            pre_loss = tmp_loss * scale_weight[i]
+                        else:
+                            pre_loss += tmp_loss * scale_weight[i]
+                    print(f"pre_loss: {pre_loss},now_data:{now_data}, epoch:{epoch}")
+                    l_pixel += l_forget_weight * pre_loss
+
                 l_pixel.backward()
                 optimizer.step()
 
@@ -347,11 +348,23 @@ if __name__ == '__main__':
                     # torch.save(state, save_path)
 
             # val
-            if opt.distributed:
-                rank, _ = get_dist_info()
-            else:
-                rank = 0
-            if rank == 0 and (epoch + 1) % config['training']['val_freq_epoch'] == 0:
+        if opt.distributed:
+            rank, _ = get_dist_info()
+        else:
+            rank = 0
+        if rank == 0:
+            for val_data in range(1, now_data + 1):
+                val_dataset = dataset_continual(
+                    path_json=config['dataset']['val_json_path'],
+                    now_task=str(val_data),
+                    image_size=512
+                )
+                val_dataloader = torch.utils.data.DataLoader(
+                    val_dataset,
+                    batch_size=1,
+                    shuffle=False,
+                    num_workers=1,
+                    pin_memory=False)
                 with torch.no_grad():
                     if opt.dpm_solver:
                         sampler = DPMSolverSampler(model)
