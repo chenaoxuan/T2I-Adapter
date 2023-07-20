@@ -404,6 +404,6 @@ if __name__ == '__main__':
                                                   0.5,
                                                   (0, 255, 0), 2)
                                 cv2.imwrite(os.path.join(experiments_root, 'visualization',
-                                                         'sample_d%03d_e%04d_v%02d_s%04d.png' % (
-                                                             now_data, epoch, d_idx, v_idx)),
+                                                         'sample_d%02d_e%02d_v%03d_s%02d.png' % (
+                                                             now_data, val_data, d_idx, v_idx)),
                                             img[:, :, ::-1])
