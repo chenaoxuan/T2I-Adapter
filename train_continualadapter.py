@@ -313,7 +313,18 @@ if __name__ == '__main__':
 
                 optimizer.zero_grad()
                 model.zero_grad()
-                l_pixel, loss_dict = model(z, c=c, features_adapter=True, data_idx=now_data)
+                l_pixel, pre_losses, loss_dict = model(z, c=c, features_adapter=True, data_idx=now_data)
+                scale_weight = (0.25, 0.25, 0.25, 0.25)
+                l_forget_weight = 0
+                if now_data != 1:
+                    for i, tmp_loss in enumerate(pre_losses):
+                        if i == 0:
+                            pre_loss = tmp_loss * scale_weight[i]
+                        else:
+                            pre_loss += tmp_loss * scale_weight[i]
+                    print(f"pre_loss: {pre_loss},now_data:{now_data}, epoch:{epoch}")
+                    l_pixel += l_forget_weight * pre_loss
+
                 l_pixel.backward()
                 optimizer.step()
 
