@@ -305,7 +305,7 @@ if __name__ == '__main__':
                 model.zero_grad()
                 l_pixel, pre_losses, loss_dict = model(z, c=c, features_adapter=True, data_idx=now_data)
                 scale_weight = (0.25, 0.25, 0.25, 0.25)
-                l_forget_weight = 0
+                l_forget_weight = 0.1
                 if now_data != 1:
                     for i, tmp_loss in enumerate(pre_losses):
                         if i == 0:
