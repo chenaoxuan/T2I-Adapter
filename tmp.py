@@ -312,7 +312,8 @@ if __name__ == '__main__':
                             pre_loss = tmp_loss * scale_weight[i]
                         else:
                             pre_loss += tmp_loss * scale_weight[i]
-                    print(f"pre_loss: {pre_loss},now_data:{now_data}, epoch:{epoch}")
+                    if epoch % 25 == 0:
+                        print(f"pre_loss: {pre_loss},now_data:{now_data}, epoch:{epoch}")
                     l_pixel += l_forget_weight * pre_loss
 
                 l_pixel.backward()

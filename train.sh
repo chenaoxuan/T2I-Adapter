@@ -19,6 +19,7 @@ python train_subj.py --ckpt /hy-tmp/sd-v1-4.ckpt --gpu --epochs 1000 --print_fq 
 
 
 python tmp.py --ckpt /hy-tmp/sd-v1-4.ckpt --gpu --epochs 500 --print_fq 25 --n_samples 4
+python tmp.py --ckpt /hy-tmp/sd-v1-4.ckpt --gpu --epochs 300 --print_fq 25 --n_samples 6
 
 
 oss cp oss://Clip-Vit-Large-Patch14.zip /hy-tmp
