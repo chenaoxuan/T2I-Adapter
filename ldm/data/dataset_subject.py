@@ -49,10 +49,39 @@ class dataset_continual(Dataset):
         return len(self.files[self.now_task])
 
 
+class dataset_replay(Dataset):
+    def __init__(self, root_path, now_task, iftrain=True, image_size=512):
+        super().__init__()
+        now_path = os.path.join(root_path, now_task)
+        self.iftrain = iftrain
+        if iftrain:
+            json_path = os.path.join(now_path, f'train{now_task}.json')
+        else:
+            json_path = os.path.join(now_path, f'val{now_task}.json')
+        with open(json_path, 'r', encoding='utf-8') as fp:
+            data = json.load(fp)
+        if self.iftrain:
+            self.root_img_path = [os.path.join(now_path, img_path) for img_path in data['img_file']]
+            self.image_size = image_size
+        self.caption = data['caption']
+
+    def __getitem__(self, idx):
+        if self.iftrain:
+            im = cv2.imread(self.root_img_path[idx])
+            im = cv2.resize(im, (self.image_size, self.image_size))
+            im = img2tensor(im, bgr2rgb=True, float32=True) / 255.
+            return {'im': im, 'sentence': self.caption[idx]}
+        else:
+            return {'sentence': self.caption[idx]}
+
+    def __len__(self):
+        return len(self.caption)
+
+
 if __name__ == '__main__':
     from torch.utils.data import DataLoader
 
-    dataset = dataset_continual(path_json='F:\\dataset\\continual_dog\\dog_train.json', now_task='3')
+    dataset = dataset_replay(root_path="C:\\Users\\cax11\\Desktop\\replay", now_task='1', iftrain=False, image_size=512)
     # dataset = dataset_subject(path_json='F:\\dataset\\continual_dog\\dog_train1.json')
     print(len(dataset))
     loader = DataLoader(dataset=dataset, batch_size=2)

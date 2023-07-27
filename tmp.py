@@ -3,7 +3,7 @@ import torch
 import os
 
 from basicsr.utils import img2tensor, tensor2img, scandir, get_time_str, get_root_logger, get_env_info
-from ldm.data.dataset_subject import dataset_continual
+from ldm.data.dataset_subject import dataset_replay
 import argparse
 from ldm.models.diffusion.ddim import DDIMSampler
 from ldm.models.diffusion.plms import PLMSSampler
@@ -264,9 +264,10 @@ if __name__ == '__main__':
     # training
     logger.info(f'Start training from data:{start_data}, epoch: {start_epoch}, iter: {current_iter}')
     for now_data in range(start_data, int(config.dataset.end_data) + 1):
-        train_dataset = dataset_continual(
-            path_json=config['dataset']['train_json_path'],
+        train_dataset = dataset_replay(
+            root_path=config['dataset']['root_path'],
             now_task=str(now_data),
+            iftrain=True,
             image_size=512
         )
         if opt.distributed:
@@ -330,10 +331,10 @@ if __name__ == '__main__':
                     rank, _ = get_dist_info()
                 else:
                     rank = 0
-                if (rank == 0) and ((epoch + 1) % config['training']['save_freq_epoch'] == 0):
-                    save_filename = f'model_ad_{epoch + 1}.pth'
-                    save_path = os.path.join(experiments_root, 'models', save_filename)
-                    save_dict = {}
+                # if (rank == 0) and ((epoch + 1) % config['training']['save_freq_epoch'] == 0):
+                #     save_filename = f'model_ad_{epoch + 1}.pth'
+                #     save_path = os.path.join(experiments_root, 'models', save_filename)
+                #     save_dict = {}
                     # model_ad_bare = get_bare_model(model_ad)
                     # state_dict = model_ad_bare.state_dict()
                     # for key, param in state_dict.items():
@@ -355,9 +356,10 @@ if __name__ == '__main__':
             rank = 0
         if rank == 0:
             for val_data in range(1, now_data + 1):
-                val_dataset = dataset_continual(
-                    path_json=config['dataset']['val_json_path'],
+                val_dataset = dataset_replay(
+                    root_path=config['dataset']['root_path'],
                     now_task=str(val_data),
+                    iftrain=False,
                     image_size=512
                 )
                 val_dataloader = torch.utils.data.DataLoader(
@@ -376,11 +378,6 @@ if __name__ == '__main__':
                     for d_idx, data in enumerate(val_dataloader):
                         for v_idx in range(opt.n_samples):
                             c = model.get_learned_conditioning(data['sentence'])
-                            im_mask = tensor2img(data['im'])
-                            cv2.imwrite(
-                                os.path.join(experiments_root, 'visualization',
-                                             'subj_%04d_%03d_%02d.png' % (epoch, now_data, d_idx)),
-                                im_mask)
                             shape = [opt.C, opt.H // opt.f, opt.W // opt.f]
                             samples_ddim, _ = sampler.sample(S=opt.ddim_steps,
                                                              data_idx=now_data,

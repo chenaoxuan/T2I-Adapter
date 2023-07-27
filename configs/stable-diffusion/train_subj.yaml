@@ -76,10 +76,9 @@ model:
         device: cuda
 
 dataset:
-  train_json_path: /hy-tmp/continual_dog/dog_train.json
-  val_json_path: /hy-tmp/continual_dog/dog_val.json
+  root_path: /hy-tmp/replay
   start_data: 1
-  end_data: 3
+  end_data: 1
 
 logger:
   print_freq: 100
