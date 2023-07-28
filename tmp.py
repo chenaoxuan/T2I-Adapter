@@ -397,8 +397,7 @@ if __name__ == '__main__':
                                                              unconditional_conditioning=model.get_learned_conditioning(
                                                                  [""]),
                                                              eta=opt.ddim_eta,
-                                                             x_T=None,
-                                                             adapter_input=True)
+                                                             x_T=None)
                             x_samples_ddim = model.decode_first_stage(samples_ddim)
                             x_samples_ddim = torch.clamp((x_samples_ddim + 1.0) / 2.0, min=0.0, max=1.0)
                             x_samples_ddim = x_samples_ddim.cpu().permute(0, 2, 3, 1).numpy()
