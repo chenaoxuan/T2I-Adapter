@@ -829,7 +829,7 @@ class LatentDiffusion(DDPM):
 
         return self.p_losses(x, c, t, *args, **kwargs)
 
-    def apply_model(self, x_noisy, t, cond, return_ids=False, require_pre_loss=False, **kwargs):
+    def apply_model(self, x_noisy, t, cond, return_ids=False, data_idx=None, **kwargs):
         if isinstance(cond, dict):
             # hybrid case, cond is expected to be a dict
             pass
@@ -838,20 +838,17 @@ class LatentDiffusion(DDPM):
                 cond = [cond]
             key = 'c_concat' if self.model.conditioning_key == 'concat' else 'c_crossattn'
             cond = {key: cond}
-        if require_pre_loss == False:
-            x_recon = self.model(x_noisy, t, require_pre_loss=require_pre_loss, **cond, **kwargs)
+        if data_idx is None:
+            x_recon = self.model(x_noisy, t, **cond, **kwargs)
         else:
-            x_recon, pre_loss = self.model(x_noisy, t, require_pre_loss=require_pre_loss, **cond, **kwargs)
-        if isinstance(x_recon, tuple) and not return_ids:
-            if require_pre_loss == False:
+            adapter_features, pre_adapter_features = self.model(x_noisy, t, **cond, data_idx=data_idx ** kwargs)
+        if data_idx is None:
+            if isinstance(x_recon, tuple) and not return_ids:
                 return x_recon[0]
             else:
-                return x_recon[0], pre_loss
-        else:
-            if require_pre_loss == False:
                 return x_recon
-            else:
-                return x_recon, pre_loss
+        else:
+            return adapter_features, pre_adapter_features
 
     def _predict_eps_from_xstart(self, x_t, t, pred_xstart):
         return (extract_into_tensor(self.sqrt_recip_alphas_cumprod, t, x_t.shape) * x_t - pred_xstart) / \
@@ -871,11 +868,19 @@ class LatentDiffusion(DDPM):
         kl_prior = normal_kl(mean1=qt_mean, logvar1=qt_log_variance, mean2=0.0, logvar2=0.0)
         return mean_flat(kl_prior) / np.log(2.0)
 
-    def p_losses(self, x_start, cond, t, noise=None, **kwargs):
+    def p_losses(self, x_start, cond, t, noise=None, data_idx=None, **kwargs):
         noise = default(noise, lambda: torch.randn_like(x_start))
         x_noisy = self.q_sample(x_start=x_start, t=t, noise=noise)
-        model_output, pre_losses = self.apply_model(x_noisy, t, cond, require_pre_loss=True, **kwargs)
-
+        if data_idx is None:
+            model_output = self.apply_model(x_noisy, t, cond, **kwargs)
+        else:
+            adapter_features, pre_adapter_features = self.apply_model(x_noisy, t, cond, data_idx=data_idx, **kwargs)
+            adapter_loss = 0
+            adapter_weight = [0.25, 0.25, 0.25, 0.25]
+            for idx, adapter_feature in enumerate(adapter_features):
+                adapter_loss += (torch.nn.functional.mse_loss(adapter_feature, pre_adapter_features[idx]) * \
+                                 adapter_weight[idx])
+            return adapter_loss
         loss_dict = {}
         prefix = 'train' if self.training else 'val'
 
@@ -906,7 +911,10 @@ class LatentDiffusion(DDPM):
         loss += (self.original_elbo_weight * loss_vlb)
         loss_dict.update({f'{prefix}/loss': loss})
 
-        return loss, pre_losses, loss_dict
+        if "data_idx" not in kwargs:
+            return loss, loss_dict
+        else:
+            return loss, loss_dict
 
     def p_mean_variance(self, x, c, t, clip_denoised: bool, return_codebook_ids=False, quantize_denoised=False,
                         return_x0=False, score_corrector=None, corrector_kwargs=None):
@@ -1305,7 +1313,7 @@ class DiffusionWrapper(pl.LightningModule):
         self.conditioning_key = conditioning_key
         assert self.conditioning_key in [None, 'concat', 'crossattn', 'hybrid', 'adm', 'hybrid-adm', 'crossattn-adm']
 
-    def forward(self, x, t, c_concat: list = None, c_crossattn: list = None, c_adm=None, require_pre_loss=False,
+    def forward(self, x, t, c_concat: list = None, c_crossattn: list = None, c_adm=None, data_idx=None,
                 **kwargs):
         if self.conditioning_key is None:
             out = self.diffusion_model(x, t, **kwargs)
@@ -1314,7 +1322,7 @@ class DiffusionWrapper(pl.LightningModule):
             out = self.diffusion_model(xc, t, **kwargs)
         elif self.conditioning_key == 'crossattn':
             cc = torch.cat(c_crossattn, 1)
-            out = self.diffusion_model(x, t, context=cc, require_pre_loss=require_pre_loss, **kwargs)
+            out = self.diffusion_model(x, t, context=cc, data_idx=data_idx, **kwargs)
         elif self.conditioning_key == 'hybrid':
             xc = torch.cat([x] + c_concat, dim=1)
             cc = torch.cat(c_crossattn, 1)

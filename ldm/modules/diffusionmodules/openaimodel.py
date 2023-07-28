@@ -1150,7 +1150,7 @@ class UNetModelAdapter(nn.Module):
         self.output_blocks.apply(convert_module_to_f32)
 
     def forward(self, x, timesteps=None, context=None, y=None, features_adapter=True, append_to_context=None,
-                data_idx=None, require_pre_loss=False):
+                data_idx=None):
         """
         Apply the model to an input batch.
         :param x: an [N x C x ...] Tensor of inputs.
@@ -1175,20 +1175,20 @@ class UNetModelAdapter(nn.Module):
         if append_to_context is not None:
             context = torch.cat([context, append_to_context], dim=1)
 
-        adapter_idx = 0
-        pre_loss = []
+        channel_idx = 0
+        now_features = []
+        pre_features = []
         for id, module in enumerate(self.input_blocks):
             h = module(h, emb, context)
             if ((id + 1) % 3 == 0) and features_adapter:
-                now_feature = self.adapter(h, data_idx, adapter_idx)
-                if require_pre_loss and data_idx != 1:
-                    pre_features = self.adapter.get_pre_feature(h, data_idx, adapter_idx)
-                    tmp_loss = 0
-                    for lt, pre_feature in enumerate(pre_features):
-                        tmp_loss += torch.nn.functional.mse_loss(pre_feature, now_feature)
-                    pre_loss.append(tmp_loss / len(pre_features))
+                if data_idx is None:
+                    now_feature = self.adapter(h, channel_idx)
+                else:
+                    now_feature, pre_feature = self.adapter(h, channel_idx, data_idx=data_idx)
+                    now_features.append(now_feature)
+                    pre_features.append(pre_feature)
                 h = h + now_feature
-                adapter_idx += 1
+                channel_idx += 1
             hs.append(h)
 
         h = self.middle_block(h, emb, context)
@@ -1196,13 +1196,7 @@ class UNetModelAdapter(nn.Module):
             h = th.cat([h, hs.pop()], dim=1)
             h = module(h, emb, context)
         h = h.type(x.dtype)
-        if self.predict_codebook_ids:
-            if require_pre_loss is False:
-                return self.id_predictor(h)
-            else:
-                return self.id_predictor(h), pre_loss
+        if data_idx is None:
+            return self.out(h)
         else:
-            if require_pre_loss is False:
-                return self.out(h)
-            else:
-                return self.out(h), pre_loss
+            return now_features, pre_features

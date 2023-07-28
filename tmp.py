@@ -263,6 +263,8 @@ if __name__ == '__main__':
 
     # training
     logger.info(f'Start training from data:{start_data}, epoch: {start_epoch}, iter: {current_iter}')
+    rare_token_list = []
+    rare_token_repeat = 10
     for now_data in range(start_data, int(config.dataset.end_data) + 1):
         train_dataset = dataset_replay(
             root_path=config['dataset']['root_path'],
@@ -270,6 +272,8 @@ if __name__ == '__main__':
             iftrain=True,
             image_size=512
         )
+        rare_token_list.append(train_dataset.get_rare_token())
+
         if opt.distributed:
             train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
         else:
@@ -283,6 +287,7 @@ if __name__ == '__main__':
             sampler=train_sampler)
 
         model.model.diffusion_model.adapter.before_train(data_idx=now_data, device=device)
+
         # optimizer
         params = list(model.model.diffusion_model.adapter.parameters())
         optimizer = torch.optim.AdamW(params, lr=config['training']['lr'])
@@ -301,22 +306,11 @@ if __name__ == '__main__':
                         c = model.get_learned_conditioning(data['sentence'])
                         z = model.encode_first_stage((data['im'] * 2 - 1.).to(device))
                         z = model.get_first_stage_encoding(z)
+                        noise_shape = z.shape
 
                 optimizer.zero_grad()
                 model.zero_grad()
-                l_pixel, pre_losses, loss_dict = model(z, c=c, features_adapter=True, data_idx=now_data)
-                scale_weight = (0.25, 0.25, 0.25, 0.25)
-                l_forget_weight = 0.1
-                if now_data != 1:
-                    for i, tmp_loss in enumerate(pre_losses):
-                        if i == 0:
-                            pre_loss = tmp_loss * scale_weight[i]
-                        else:
-                            pre_loss += tmp_loss * scale_weight[i]
-                    if epoch % 25 == 0:
-                        print(f"pre_loss: {pre_loss},now_data:{now_data}, epoch:{epoch}")
-                    l_pixel += l_forget_weight * pre_loss
-
+                l_pixel, loss_dict = model(z, c=c)
                 l_pixel.backward()
                 optimizer.step()
 
@@ -335,20 +329,34 @@ if __name__ == '__main__':
                 #     save_filename = f'model_ad_{epoch + 1}.pth'
                 #     save_path = os.path.join(experiments_root, 'models', save_filename)
                 #     save_dict = {}
-                    # model_ad_bare = get_bare_model(model_ad)
-                    # state_dict = model_ad_bare.state_dict()
-                    # for key, param in state_dict.items():
-                    #     if key.startswith('module.'):  # remove unnecessary 'module.'
-                    #         key = key[7:]
-                    #     save_dict[key] = param.cpu()
-                    # torch.save(save_dict, save_path)
-                    # # save state
-                    # state = {'data': now_data, 'epoch': epoch, 'iter': current_iter + 1,
-                    #          'optimizers': optimizer.state_dict()}
-                    # save_filename = f'{epoch + 1}.state'
-                    # save_path = os.path.join(experiments_root, 'training_states', save_filename)
-                    # torch.save(state, save_path)
+                # model_ad_bare = get_bare_model(model_ad)
+                # state_dict = model_ad_bare.state_dict()
+                # for key, param in state_dict.items():
+                #     if key.startswith('module.'):  # remove unnecessary 'module.'
+                #         key = key[7:]
+                #     save_dict[key] = param.cpu()
+                # torch.save(save_dict, save_path)
+                # # save state
+                # state = {'data': now_data, 'epoch': epoch, 'iter': current_iter + 1,
+                #          'optimizers': optimizer.state_dict()}
+                # save_filename = f'{epoch + 1}.state'
+                # save_path = os.path.join(experiments_root, 'training_states', save_filename)
+                # torch.save(state, save_path)
+            if now_data != 1:
+                # loss_weight = []
+                # single_data_weight = 1. / len(rare_token_list)
 
+                for idx, rare_token in enumerate(rare_token_list):
+                    for _ in range(rare_token_repeat):
+                        z = torch.randn(noise_shape, device=device)
+                        optimizer.zero_grad()
+                        model.zero_grad()
+                        adapter_loss = model(z, c=[rare_token])
+                        adapter_loss.backward()
+                        optimizer.step()
+
+                if epoch % 25 == 0:
+                    print(f"adapter_loss: {adapter_loss},now_data:{now_data}, epoch:{epoch}")
             # val
         if opt.distributed:
             rank, _ = get_dist_info()

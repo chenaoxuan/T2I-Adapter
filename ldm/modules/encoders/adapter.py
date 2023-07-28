@@ -202,28 +202,33 @@ class ContinualAdapter(nn.Module):
                 for param in self.body[str(i)][j].parameters():
                     param.requires_grad = True
 
-    def get_pre_feature(self, x, end_data, channel_idx, timesteps=None, **kwargs):
-        if end_data == 1:
-            return []
-        pre_features = []
-        emb = None
-        if timesteps is not None and self.time_embed:
-            t_emb = timestep_embedding(timesteps, 320, repeat_only=False)
-            emb = self.time_embed(t_emb)
-        for idx in range((end_data - 1) * self.nums_rb):
-            x = self.body[str(channel_idx)][idx](x, emb)
-            if (idx + 1) % self.nums_rb == 0:
-                pre_features.append(x)
-        return pre_features
+    # def get_pre_feature(self, x, end_data, channel_idx, timesteps=None, **kwargs):
+    #     if end_data == 1:
+    #         return []
+    #     pre_features = []
+    #     emb = None
+    #     if timesteps is not None and self.time_embed:
+    #         t_emb = timestep_embedding(timesteps, 320, repeat_only=False)
+    #         emb = self.time_embed(t_emb)
+    #     for idx in range((end_data - 1) * self.nums_rb):
+    #         x = self.body[str(channel_idx)][idx](x, emb)
+    #         if (idx + 1) % self.nums_rb == 0:
+    #             pre_features.append(x)
+    #     return pre_features
 
-    def forward(self, x, data_idx, channel_idx, timesteps=None, **kwargs):
+    def forward(self, x, channel_idx, timesteps=None, data_idx=None, **kwargs):
         emb = None
         if timesteps is not None and self.time_embed:
             t_emb = timestep_embedding(timesteps, 320, repeat_only=False)
             emb = self.time_embed(t_emb)
-        for idx in range(data_idx * self.nums_rb):
-            x = self.body[str(channel_idx)][idx](x, emb)
-        return x
+        for idx, model in enumerate(self.body[str(channel_idx)]):
+            x = model(x, emb)
+            if idx == (data_idx * self.nums_rb) - 1:
+                pre_x = x
+        if data_idx is None:
+            return x
+        else:
+            return x, pre_x
 
 
 class LayerNorm(nn.LayerNorm):

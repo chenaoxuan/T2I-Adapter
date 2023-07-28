@@ -64,7 +64,10 @@ class dataset_replay(Dataset):
             self.root_img_path = [os.path.join(now_path, img_path) for img_path in data['img_file']]
             self.image_size = image_size
         self.caption = data['caption']
+        self.rare_token=data['rare_token']
 
+    def get_rare_token(self):
+        return self.rare_token
     def __getitem__(self, idx):
         if self.iftrain:
             im = cv2.imread(self.root_img_path[idx])
@@ -88,3 +91,4 @@ if __name__ == '__main__':
     for i, data in enumerate(loader):
         # print(i, data['im'])
         print(i, data['sentence'])
+    print(type(dataset.get_rare_token()))
