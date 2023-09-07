@@ -19,22 +19,23 @@ python train_subj.py --ckpt /hy-tmp/sd-v1-4.ckpt --gpu --epochs 1000 --print_fq 
 
 
 python tmp.py --ckpt /hy-tmp/sd-v1-4.ckpt --gpu --epochs 500 --print_fq 25 --n_samples 4
-python train_continualadapter.py --ckpt /hy-tmp/sd-v1-4.ckpt --gpu --epochs 500 --print_fq 40 --n_samples 4
+python train_singleadapter.py --ckpt /hy-tmp/sd-v1-4.ckpt --gpu --epochs 500 --print_fq 40 --n_samples 4
 python tmp.py --ckpt /hy-tmp/sd-v1-4.ckpt --gpu --epochs 300 --print_fq 25 --n_samples 6
 
 
+oss login
 oss cp oss://Clip-Vit-Large-Patch14.zip /hy-tmp
 #oss cp oss://Taiyi-CLIP-RoBERTa-102M-ViT-L-Chinese.zip /hy-tmp
 oss cp oss://sd-v1-4.zip /hy-tmp
 #oss cp oss://all.zip /hy-tmp
-oss cp oss://continual_dog.zip /hy-tmp
+oss cp oss://replay.zip /hy-tmp
 oss cp oss://dataset.zip /hy-tmp
 
 
 unzip -d Clip-Vit-Large-Patch14 Clip-Vit-Large-Patch14.zip
 unzip sd-v1-4.zip
 #unzip -d all all.zip
-unzip -d continual_dog continual_dog.zip
+unzip -d replay replay.zip
 unzip T2I-Adapter-main.zip
 unzip -d dataset dataset.zip
 

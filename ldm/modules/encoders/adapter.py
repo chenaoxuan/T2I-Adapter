@@ -240,15 +240,15 @@ class SingleAdapter(nn.Module):
         self.ksize = ksize
         self.use_conv = use_conv
         self.num = 0
+        self.time_embed = time_embed_dim is not None
         self.body = nn.ModuleDict()
         for i in range(len(self.channels)):
+            self.body[str(i)] = nn.ModuleList([])
             for j in range(self.nums_rb):
                 self.body[str(i)].append(
                     ResnetBlock(self.channels[i], self.channels[i], down=False, ksize=self.ksize, sk=True,
                                 use_conv=self.use_conv,
-                                time_embed_dim=self.time_embed_dim))
-
-        self.time_embed = time_embed_dim is not None
+                                time_embed_dim=time_embed_dim))
         self.time_embed_dim = time_embed_dim
         if time_embed_dim is not None:
             self.time_embed = nn.Sequential(
