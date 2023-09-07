@@ -231,6 +231,42 @@ class ContinualAdapter(nn.Module):
             return x, pre_x
 
 
+class SingleAdapter(nn.Module):
+    def __init__(self, channels=[320, 640, 1280, 1280], nums_rb=3, ksize=3, use_conv=True,
+                 time_embed_dim=None):
+        super(SingleAdapter, self).__init__()
+        self.channels = channels
+        self.nums_rb = nums_rb
+        self.ksize = ksize
+        self.use_conv = use_conv
+        self.num = 0
+        self.body = nn.ModuleDict()
+        for i in range(len(self.channels)):
+            for j in range(self.nums_rb):
+                self.body[str(i)].append(
+                    ResnetBlock(self.channels[i], self.channels[i], down=False, ksize=self.ksize, sk=True,
+                                use_conv=self.use_conv,
+                                time_embed_dim=self.time_embed_dim))
+
+        self.time_embed = time_embed_dim is not None
+        self.time_embed_dim = time_embed_dim
+        if time_embed_dim is not None:
+            self.time_embed = nn.Sequential(
+                nn.Linear(320, time_embed_dim),
+                nn.SiLU(),
+                nn.Linear(time_embed_dim, time_embed_dim),
+            )
+
+    def forward(self, x, channel_idx, timesteps=None, **kwargs):
+        emb = None
+        if timesteps is not None and self.time_embed:
+            t_emb = timestep_embedding(timesteps, 320, repeat_only=False)
+            emb = self.time_embed(t_emb)
+        for idx, model in enumerate(self.body[str(channel_idx)]):
+            x = model(x, emb)
+        return x
+
+
 class LayerNorm(nn.LayerNorm):
     """Subclass torch's LayerNorm to handle fp16."""
 

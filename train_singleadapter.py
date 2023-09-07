@@ -263,7 +263,6 @@ if __name__ == '__main__':
 
     # training
     logger.info(f'Start training from data:{start_data}, epoch: {start_epoch}, iter: {current_iter}')
-    rare_token_repeat = 10
     for now_data in range(start_data, int(config.dataset.end_data) + 1):
         train_dataset = dataset_replay(
             root_path=config['dataset']['root_path'],
@@ -271,11 +270,16 @@ if __name__ == '__main__':
             iftrain=True,
             image_size=512
         )
-
         if opt.distributed:
             train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
         else:
             train_sampler = None
+        val_dataset = dataset_replay(
+            root_path=config['dataset']['root_path'],
+            now_task=str(now_data),
+            iftrain=False,
+            image_size=512
+        )
         train_dataloader = torch.utils.data.DataLoader(
             train_dataset,
             batch_size=opt.batch_size,
@@ -283,9 +287,12 @@ if __name__ == '__main__':
             num_workers=opt.num_workers,
             pin_memory=True,
             sampler=train_sampler)
-
-        model.model.diffusion_model.adapter.before_train(data_idx=now_data, device=device)
-
+        val_dataloader = torch.utils.data.DataLoader(
+            val_dataset,
+            batch_size=1,
+            shuffle=False,
+            num_workers=1,
+            pin_memory=False)
         # optimizer
         params = list(model.model.diffusion_model.adapter.parameters())
         optimizer = torch.optim.AdamW(params, lr=config['training']['lr'])
@@ -304,11 +311,10 @@ if __name__ == '__main__':
                         c = model.get_learned_conditioning(data['sentence'])
                         z = model.encode_first_stage((data['im'] * 2 - 1.).to(device))
                         z = model.get_first_stage_encoding(z)
-                        noise_shape = z.shape
 
                 optimizer.zero_grad()
                 model.zero_grad()
-                l_pixel, loss_dict = model(z, c=c)
+                l_pixel, loss_dict = model(z, c=c, features_adapter=True)
                 l_pixel.backward()
                 optimizer.step()
 
@@ -340,25 +346,13 @@ if __name__ == '__main__':
                 # save_filename = f'{epoch + 1}.state'
                 # save_path = os.path.join(experiments_root, 'training_states', save_filename)
                 # torch.save(state, save_path)
+
             # val
-        if opt.distributed:
-            rank, _ = get_dist_info()
-        else:
-            rank = 0
-        if rank == 0:
-            for val_data in range(1, now_data + 1):
-                val_dataset = dataset_replay(
-                    root_path=config['dataset']['root_path'],
-                    now_task=str(val_data),
-                    iftrain=False,
-                    image_size=512
-                )
-                val_dataloader = torch.utils.data.DataLoader(
-                    val_dataset,
-                    batch_size=1,
-                    shuffle=False,
-                    num_workers=1,
-                    pin_memory=False)
+            if opt.distributed:
+                rank, _ = get_dist_info()
+            else:
+                rank = 0
+            if rank == 0 and (epoch + 1) % config['training']['val_freq_epoch'] == 0:
                 with torch.no_grad():
                     if opt.dpm_solver:
                         sampler = DPMSolverSampler(model)
@@ -371,7 +365,6 @@ if __name__ == '__main__':
                             c = model.get_learned_conditioning(data['sentence'])
                             shape = [opt.C, opt.H // opt.f, opt.W // opt.f]
                             samples_ddim, _ = sampler.sample(S=opt.ddim_steps,
-                                                             data_idx=now_data,
                                                              conditioning=c,
                                                              batch_size=1,
                                                              shape=shape,
@@ -392,6 +385,6 @@ if __name__ == '__main__':
                                                   0.5,
                                                   (0, 255, 0), 2)
                                 cv2.imwrite(os.path.join(experiments_root, 'visualization',
-                                                         'sample_d%02d_e%02d_v%03d_s%02d.png' % (
-                                                             now_data, val_data, d_idx, v_idx)),
+                                                         'sample_d%03d_e%04d_v%02d_s%04d.png' % (
+                                                             now_data, epoch, d_idx, v_idx)),
                                             img[:, :, ::-1])

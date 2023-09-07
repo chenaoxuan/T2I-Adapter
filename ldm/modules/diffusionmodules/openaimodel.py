@@ -18,7 +18,7 @@ from ldm.modules.diffusionmodules.util import (
 )
 from ldm.modules.attention import SpatialTransformer
 from ldm.util import exists
-from ldm.modules.encoders.adapter import ContinualAdapter
+from ldm.modules.encoders.adapter import SingleAdapter
 
 
 # dummy replace
@@ -1131,7 +1131,8 @@ class UNetModelAdapter(nn.Module):
             )
         for param in self.parameters():
             param.requires_grad = False
-        self.adapter = ContinualAdapter(channels=[320, 640, 1280, 1280][:4], nums_rb=2, ksize=1, use_conv=False)
+        device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+        self.adapter = SingleAdapter(channels=[320, 640, 1280, 1280][:4], nums_rb=2, ksize=1, use_conv=False).to(device)
 
     def convert_to_fp16(self):
         """
@@ -1149,8 +1150,7 @@ class UNetModelAdapter(nn.Module):
         self.middle_block.apply(convert_module_to_f32)
         self.output_blocks.apply(convert_module_to_f32)
 
-    def forward(self, x, timesteps=None, context=None, y=None, features_adapter=True, append_to_context=None,
-                data_idx=None):
+    def forward(self, x, timesteps=None, context=None, y=None, features_adapter=True, append_to_context=None):
         """
         Apply the model to an input batch.
         :param x: an [N x C x ...] Tensor of inputs.
@@ -1176,18 +1176,11 @@ class UNetModelAdapter(nn.Module):
             context = torch.cat([context, append_to_context], dim=1)
 
         channel_idx = 0
-        now_features = []
-        pre_features = []
         for id, module in enumerate(self.input_blocks):
             h = module(h, emb, context)
             if ((id + 1) % 3 == 0) and features_adapter:
-                if data_idx is None:
-                    now_feature = self.adapter(h, channel_idx)
-                else:
-                    now_feature, pre_feature = self.adapter(h, channel_idx, data_idx=data_idx)
-                    now_features.append(now_feature)
-                    pre_features.append(pre_feature)
-                h = h + now_feature
+                adapter_feature = self.adapter(h, channel_idx)
+                h = h + adapter_feature
                 channel_idx += 1
             hs.append(h)
 
@@ -1196,7 +1189,4 @@ class UNetModelAdapter(nn.Module):
             h = th.cat([h, hs.pop()], dim=1)
             h = module(h, emb, context)
         h = h.type(x.dtype)
-        if data_idx is None:
-            return self.out(h)
-        else:
-            return now_features, pre_features
+        return self.out(h)
