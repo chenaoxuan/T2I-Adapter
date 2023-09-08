@@ -862,11 +862,13 @@ class LatentDiffusion(DDPM):
         kl_prior = normal_kl(mean1=qt_mean, logvar1=qt_log_variance, mean2=0.0, logvar2=0.0)
         return mean_flat(kl_prior) / np.log(2.0)
 
-    def p_losses(self, x_start, cond, t, noise=None, **kwargs):
+    def p_losses(self, x_start, cond, t, noise=None, pre_data=False, **kwargs):
         noise = default(noise, lambda: torch.randn_like(x_start))
-        x_noisy = self.q_sample(x_start=x_start, t=t, noise=noise)
+        if pre_data:
+            x_noisy = x_start
+        else:
+            x_noisy = self.q_sample(x_start=x_start, t=t, noise=noise)
         model_output = self.apply_model(x_noisy, t, cond, **kwargs)
-
         loss_dict = {}
         prefix = 'train' if self.training else 'val'
 
@@ -896,8 +898,9 @@ class LatentDiffusion(DDPM):
         loss_dict.update({f'{prefix}/loss_vlb': loss_vlb})
         loss += (self.original_elbo_weight * loss_vlb)
         loss_dict.update({f'{prefix}/loss': loss})
-
-        return loss, loss_dict
+        if pre_data:
+            return loss, loss_dict
+        return loss, loss_dict, (t, noise, x_noisy, cond)
 
     def p_mean_variance(self, x, c, t, clip_denoised: bool, return_codebook_ids=False, quantize_denoised=False,
                         return_x0=False, score_corrector=None, corrector_kwargs=None):
