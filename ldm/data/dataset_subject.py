@@ -1,6 +1,7 @@
 import json
 import cv2
 import os
+import random
 from basicsr.utils import img2tensor
 from torch.utils.data import Dataset
 
@@ -83,30 +84,53 @@ class dataset_replay(Dataset):
 
 
 class single_data():
-    def __init__(self, data_idx):
+    def __init__(self, data_idx, timesteps):
         self.data_idx = data_idx
         self.total_epoch = 0
         self.data = {}
+        self.timesteps = timesteps
+        self.step = 10
+        assert self.timesteps % self.step == 0, "self.timesteps % self.step != 0"
+        idx = list(range(0, self.timesteps, self.step))
+        # print(idx)
+        self.simple_data = {key: None for key, _ in enumerate(idx)}
+        # print(self.simple_data)
 
     def add_epoch(self):
         self.total_epoch += 1
 
-    def add_data(self, now_epoch, x):
+    def get_simple_data(self):
+        while True:
+            idx = random.randint(0, self.timesteps / self.step - 1)
+            print(idx)
+            if self.simple_data[idx] is not None:
+                break
+        return self.simple_data[idx][1]
+
+    def build_simple_data(self, loss, x):
+        t, noise, x_noisy, cond = x
+        idx = t // self.step
+        if self.simple_data[idx] is None or self.simple_data[idx][0] > loss:
+            self.simple_data[idx] = [loss, x]
+
+    def add_data(self, now_epoch, loss, x):
         data = self.data.setdefault(now_epoch, [])
         data.append(x)
+        self.build_simple_data(loss, x)
 
     def get_data(self, now_epoch):
         return self.data[now_epoch]
 
 
 if __name__ == '__main__':
-    from torch.utils.data import DataLoader
-
-    dataset = dataset_replay(root_path="C:\\Users\\cax11\\Desktop\\replay", now_task='1', iftrain=False, image_size=512)
-    # dataset = dataset_subject(path_json='F:\\dataset\\continual_dog\\dog_train1.json')
-    print(len(dataset))
-    loader = DataLoader(dataset=dataset, batch_size=2)
-    for i, data in enumerate(loader):
-        # print(i, data['im'])
-        print(i, data['sentence'])
-    print(type(dataset.get_rare_token()))
+    # from torch.utils.data import DataLoader
+    #
+    # dataset = dataset_replay(root_path="C:\\Users\\cax11\\Desktop\\replay", now_task='1', iftrain=False, image_size=512)
+    # # dataset = dataset_subject(path_json='F:\\dataset\\continual_dog\\dog_train1.json')
+    # print(len(dataset))
+    # loader = DataLoader(dataset=dataset, batch_size=2)
+    # for i, data in enumerate(loader):
+    #     # print(i, data['im'])
+    #     print(i, data['sentence'])
+    # print(type(dataset.get_rare_token()))
+    tmp = single_data(data_idx=1, timesteps=1000)

@@ -18,7 +18,7 @@ python train_subj.py --ckpt F:\\sd-v1-4.ckpt --gpu --epochs 500 --print_fq 25
 python train_subj.py --ckpt /hy-tmp/sd-v1-4.ckpt --gpu --epochs 1000 --print_fq 25 --n_samples 2
 
 
-python tmp.py --ckpt /hy-tmp/sd-v1-4.ckpt --gpu --epochs 500 --print_fq 25 --n_samples 4
+python tmp.py --ckpt /hy-tmp/sd-v1-4.ckpt --gpu --epochs 3 --print_fq 25 --n_samples 1
 python train_singleadapter.py --ckpt /hy-tmp/sd-v1-4.ckpt --gpu --epochs 500 --print_fq 40 --n_samples 4
 python tmp.py --ckpt /hy-tmp/sd-v1-4.ckpt --gpu --epochs 300 --print_fq 25 --n_samples 6
 
@@ -35,7 +35,7 @@ oss cp oss://dataset.zip /hy-tmp
 unzip -d Clip-Vit-Large-Patch14 Clip-Vit-Large-Patch14.zip
 unzip sd-v1-4.zip
 #unzip -d all all.zip
-unzip -d replay replay.zip
+unzip replay.zip
 unzip T2I-Adapter-main.zip
 unzip -d dataset dataset.zip
 
@@ -44,7 +44,7 @@ cd hy-tmp/T2I-Adapter
 
 
 zip -r train_subj.zip train_subj/
-zip -r 1.zip train_subj/
+zip -r data_replay.zip train_subj/
 zip -r samples.zip samples/
 
 

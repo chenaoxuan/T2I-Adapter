@@ -301,9 +301,9 @@ if __name__ == '__main__':
             if opt.distributed:
                 train_dataloader.sampler.set_epoch(epoch)
             # train saved data
-            for pre_data_idx, value in save_data_dict.items():
-                value = value.get_data(now_epoch=epoch)
-                for t, noise, z, c in value:
+            for pre_data_idx, pre_data in save_data_dict.items():
+                for idx in len(train_dataloader):
+                    t, noise, z, c = pre_data.get_simple_data()
                     current_iter += 1
                     optimizer.zero_grad()
                     model.zero_grad()
@@ -332,9 +332,9 @@ if __name__ == '__main__':
                 optimizer.zero_grad()
                 model.zero_grad()
                 l_pixel, loss_dict, save_data = model(z, c=c, features_adapter=True)
+                single_d.add_data(epoch, l_pixel.item(), save_data)
                 l_pixel.backward()
                 optimizer.step()
-                single_d.add_data(epoch, save_data)
 
                 if (current_iter + 1) % opt.print_fq == 0:
                     logger.info(f"Data:{now_data}, Epoch:{epoch}")
