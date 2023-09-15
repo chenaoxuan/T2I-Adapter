@@ -84,12 +84,12 @@ class dataset_replay(Dataset):
 
 
 class single_data():
-    def __init__(self, data_idx, timesteps):
+    def __init__(self, data_idx, timesteps=1000, step=10):
         self.data_idx = data_idx
         self.total_epoch = 0
         self.data = {}
         self.timesteps = timesteps
-        self.step = 10
+        self.step = step
         assert self.timesteps % self.step == 0, "self.timesteps % self.step != 0"
         idx = list(range(0, self.timesteps, self.step))
         # print(idx)
@@ -109,7 +109,7 @@ class single_data():
 
     def build_simple_data(self, loss, x):
         t, noise, x_noisy, cond = x
-        idx = t // self.step
+        idx = t.item() // self.step
         if self.simple_data[idx] is None or self.simple_data[idx][0] > loss:
             self.simple_data[idx] = [loss, x]
 

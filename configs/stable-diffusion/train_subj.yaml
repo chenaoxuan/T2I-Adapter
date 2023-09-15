@@ -78,7 +78,7 @@ model:
 dataset:
   root_path: /hy-tmp/replay
   start_data: 1
-  end_data: 1
+  end_data: 3
 
 logger:
   print_freq: 100

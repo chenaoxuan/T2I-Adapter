@@ -20,7 +20,7 @@ python train_subj.py --ckpt /hy-tmp/sd-v1-4.ckpt --gpu --epochs 1000 --print_fq 
 
 python tmp.py --ckpt /hy-tmp/sd-v1-4.ckpt --gpu --epochs 3 --print_fq 25 --n_samples 1
 python train_singleadapter.py --ckpt /hy-tmp/sd-v1-4.ckpt --gpu --epochs 500 --print_fq 40 --n_samples 4
-python tmp.py --ckpt /hy-tmp/sd-v1-4.ckpt --gpu --epochs 300 --print_fq 25 --n_samples 6
+python tmp.py --ckpt /hy-tmp/sd-v1-4.ckpt --gpu --epochs 500 --print_fq 40 --n_samples 4
 
 
 oss login

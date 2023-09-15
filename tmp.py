@@ -302,7 +302,7 @@ if __name__ == '__main__':
                 train_dataloader.sampler.set_epoch(epoch)
             # train saved data
             for pre_data_idx, pre_data in save_data_dict.items():
-                for idx in len(train_dataloader):
+                for idx in range(len(train_dataloader)):
                     t, noise, z, c = pre_data.get_simple_data()
                     current_iter += 1
                     optimizer.zero_grad()
@@ -341,7 +341,7 @@ if __name__ == '__main__':
                     for t in loss_dict:
                         loss_dict[t] = round(loss_dict[t].item(), 6)
                     logger.info(loss_dict)
-                    print(save_data)
+                    # print(save_data)
 
                 # save checkpoint
                 if opt.distributed:
